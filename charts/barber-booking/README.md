@@ -72,10 +72,13 @@ One `Application` per shop; each just needs its own values file and its own
 
 ## First shop — what to configure
 
-1. **Build and push images** to a registry your cluster can pull from (this
-   is outside the chart — your existing CI does this):
-   `ghcr.io/you/barber-booking-backend:v1.0.0` and `...-frontend:v1.0.0`.
-   If that registry/package is private, see "Private registry access" below.
+1. **Build and push images** — a GitHub Actions workflow is already included
+   (`.github/workflows/build-images.yml`): push a tag like `v1.0.0` and it
+   builds+pushes both images to this repo's own GHCR namespace,
+   `ghcr.io/<owner>/<repo>-backend:v1.0.0` and `...-frontend:v1.0.0` (image
+   names derive from the repo, nothing to edit). GHCR packages are private
+   by default — see "Private registry access" below for how the cluster
+   authenticates to pull them.
 2. **DNS**: point two hostnames at your Ingress controller's load balancer —
    one for the website, one for the API (e.g. `shop.example.com` and
    `api.shop.example.com`). They must be different hosts (see `values.yaml`
