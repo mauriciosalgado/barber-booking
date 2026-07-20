@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.config import get_settings
 from app.database import engine
-from app.models import Barber, BrandAsset, Service, User
+from app.models import Barber, Service, Setting, User
 from app.security import hash_password
 
 # Bundled logo used when the shop hasn't uploaded one yet.
@@ -80,7 +80,7 @@ def seed_logo() -> None:
     the database is the source of truth and the owner replaces it from the UI.
     """
     with Session(engine) as session:
-        if session.get(BrandAsset, "logo") is not None:
+        if session.get(Setting, "logo") is not None:
             return
         source = get_settings().shop_logo_path
         path = Path(source) if source else _DEFAULT_LOGO
@@ -89,7 +89,7 @@ def seed_logo() -> None:
         suffix = path.suffix.lower()
         content_type = "image/png" if suffix == ".png" else "image/jpeg"
         session.add(
-            BrandAsset(key="logo", content_type=content_type, data=path.read_bytes())
+            Setting(key="logo", content_type=content_type, data=path.read_bytes())
         )
         session.commit()
 

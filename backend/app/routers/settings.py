@@ -18,7 +18,7 @@ from sqlmodel import Session, SQLModel
 
 from app.config import get_settings
 from app.database import SessionDep
-from app.models import BrandAsset, Setting
+from app.models import Setting
 from app.security import AdminUser
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -28,7 +28,7 @@ _DEFAULT_LOGO = Path(__file__).parent.parent / "assets" / "default-logo.jpg"
 
 # Logos are small; refuse anything that clearly isn't a sensible icon upload.
 _MAX_LOGO_BYTES = 2 * 1024 * 1024
-_ALLOWED_LOGO_TYPES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
+_ALLOWED_LOGO_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 # Colours are plain #rrggbb hex, so the owner has full control over the palette.
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -91,7 +91,7 @@ def _set(session: Session, key: str, value: str) -> None:
 
 
 def _logo_version(session: Session) -> str:
-    logo = session.get(BrandAsset, "logo")
+    logo = session.get(Setting, "logo")
     return str(logo.updated_at.timestamp()) if logo else "0"
 
 
@@ -122,8 +122,8 @@ def update_theme(data: ThemeUpdate, session: SessionDep, admin: AdminUser) -> Th
 @router.get("/logo")
 def read_logo(session: SessionDep) -> Response:
     """The shop's logo image. Falls back to the bundled default if unset."""
-    logo = session.get(BrandAsset, "logo")
-    if logo:
+    logo = session.get(Setting, "logo")
+    if logo and logo.data:
         return Response(
             content=logo.data,
             media_type=logo.content_type,
@@ -140,7 +140,7 @@ async def update_logo(
     if file.content_type not in _ALLOWED_LOGO_TYPES:
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="A imagem deve ser PNG, JPEG, WEBP ou SVG.",
+            detail="A imagem deve ser PNG, JPEG ou WEBP.",
         )
     data = await file.read()
     if len(data) > _MAX_LOGO_BYTES:
@@ -149,13 +149,13 @@ async def update_logo(
             detail="A imagem é demasiado grande (máx. 2 MB).",
         )
 
-    logo = session.get(BrandAsset, "logo")
+    logo = session.get(Setting, "logo")
     if logo:
         logo.content_type = file.content_type
         logo.data = data
         logo.updated_at = datetime.now(timezone.utc)
     else:
-        logo = BrandAsset(key="logo", content_type=file.content_type, data=data)
+        logo = Setting(key="logo", content_type=file.content_type, data=data)
     session.add(logo)
     session.commit()
     return _read_theme(session)

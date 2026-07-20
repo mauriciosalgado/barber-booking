@@ -10,7 +10,6 @@ from app.models.appointment import (
     ServiceSwitch,
 )
 from app.models.barber import Barber, BarberCreate, BarberRead, BarberUpdate
-from app.models.brand_asset import BrandAsset
 from app.models.closure import Closure, ClosureCreate, ClosureRead
 from app.models.service import (
     Service,
@@ -35,7 +34,6 @@ __all__ = [
     "BarberCreate",
     "BarberRead",
     "BarberUpdate",
-    "BrandAsset",
     "Closure",
     "ClosureCreate",
     "ClosureRead",
