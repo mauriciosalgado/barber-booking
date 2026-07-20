@@ -7,8 +7,10 @@ or a built-in admin console.
 **One deployment = one shop.** Configure via `docker-compose.yml` and the same
 images run any shop.
 
+## Layout
+
 ```
-backend/             FastAPI + SQLModel API, with /admin (SQLAdmin)
+backend/             FastAPI + SQLModel API with /admin console
 frontend/            Reflex UI (pure Python)
 docker-compose.yml   single config surface — edit and run
 ```
@@ -28,11 +30,11 @@ docker compose up
 
 Owner login: **`owner@theshop.com`** / **`change-me`**.
 
-## Configure for your shop
+## Configuration
 
 Edit the `environment` block in `docker-compose.yml`. Everything is in one place.
 
-### 1. Shop identity (required)
+### Shop identity (required)
 
 | Variable | Example |
 | -------- | ------- |
@@ -47,7 +49,7 @@ Edit the `environment` block in `docker-compose.yml`. Everything is in one place
 > someone guesses it they can log in as any user. Generate one per shop with
 > `openssl rand -hex 32`.
 
-### 2. Branding (optional — owner can change live from the UI)
+### Branding (optional — owner can change live from the UI)
 
 | Variable | Default |
 | -------- | ------- |
@@ -58,7 +60,7 @@ Edit the `environment` block in `docker-compose.yml`. Everything is in one place
 These seed the database on first start. After that, the owner controls
 colours, logo, and headline from the **Aparência** card in the UI.
 
-### 3. Email (required for production)
+### Email (required for production)
 
 | Variable | Dev default |
 | -------- | ----------- |
@@ -72,7 +74,7 @@ colours, logo, and headline from the **Aparência** card in the UI.
 In production, point at a real provider (Brevo, Mailgun, SES, etc.) with
 `SMTP_STARTTLS=true` and credentials set.
 
-### 4. Infrastructure (required for production)
+### Infrastructure (required for production)
 
 **Backend:**
 
@@ -90,13 +92,13 @@ In production, point at a real provider (Brevo, Mailgun, SES, etc.) with
 | `PUBLIC_API_URL` | `http://localhost:8000` |
 | `ADMIN_URL` | `http://localhost:8000/admin` |
 
-### 5. HTTPS
+### HTTPS
 
 The app does not terminate TLS. Put a reverse proxy in front (Caddy, nginx,
 Traefik, k8s Ingress, cloud LB) and set all `*_URL` vars to `https://` addresses.
 Lock `CORS_ORIGINS` to the frontend's real origin.
 
-### 6. Production database
+### Production database
 
 Swap SQLite for Postgres and remove the `./data:/data` volume:
 
@@ -123,8 +125,7 @@ DATABASE_URL: "postgresql://user:pass@host:5432/barber"
 - **Weekly recurrence** — optionally, customers repeat a booking weekly (barber
   controls the cap).
 - **Email verification** — new accounts must confirm before booking.
-- **Password reset** — `POST /auth/forgot-password` → email link →
-  `POST /auth/reset-password`.
+- **Password reset** — `POST /auth/forgot-password` → email → `POST /auth/reset-password`.
 - **Rate limiting** — 10/min login, 5/min register, 3/min reset.
 - **Closures** — the owner blocks a period; overlapping bookings are cancelled.
 
