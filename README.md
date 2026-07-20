@@ -85,70 +85,47 @@ error is caught and logged, not surfaced to the user). Register a throwaway
 account and confirm the verification email actually lands in an inbox — a
 `200 OK` response doesn't prove anything was sent.
 
-#### Option A — Gmail app password (quickest, no domain needed)
+#### How we set it up: Gmail + a branded domain address
 
-1. Turn on 2-Step Verification: <https://myaccount.google.com/security>
-2. Generate an app password: <https://myaccount.google.com/apppasswords> →
-   name it (e.g. `barber-booking`) → copy the 16-character code shown.
-3. Configure:
+This gives a `noreply@yourshop.com` sender without running any mail server,
+using a Gmail account (a new one created just for the shop, or an existing
+one) plus the domain bought on Cloudflare.
+
+1. **Create the app password.** On the Gmail account: turn on 2-Step
+   Verification (<https://myaccount.google.com/security>), then generate an
+   app password at <https://myaccount.google.com/apppasswords> → name it
+   (e.g. `barber-booking`) → copy the 16-character code.
+2. **Cloudflare → Email Routing**: add a rule forwarding
+   `noreply@yourshop.com` → the Gmail address. This step is only needed so
+   Gmail has somewhere to deliver the one-time verification email in the
+   next step — Email Routing is inbound-only, it's not an SMTP relay.
+3. **Gmail → Settings → Accounts and Import → Send mail as → Add another
+   email address** → enter `noreply@yourshop.com`.
+4. Gmail asks for an SMTP relay to verify sending through — point it at
+   **Gmail's own server**, authenticating as the Gmail account itself:
+   - SMTP Server: `smtp.gmail.com`, Port: `587` (TLS)
+   - Username: the Gmail address, Password: the app password from step 1
+5. Gmail emails a confirmation link to `noreply@yourshop.com`, which lands
+   in the Gmail inbox via the Cloudflare forward — click it to finish.
+6. Configure the backend:
 
    | Variable | Value |
    | -------- | ----- |
    | `SMTP_HOST` | `smtp.gmail.com` |
    | `SMTP_PORT` | `587` |
    | `SMTP_STARTTLS` | `true` |
-   | `SMTP_FROM` | your Gmail address |
-   | `SMTP_USERNAME` | your Gmail address |
-   | `SMTP_PASSWORD` | the 16-character app password (not your Google login password) |
+   | `SMTP_USERNAME` | the Gmail address |
+   | `SMTP_PASSWORD` | the app password from step 1 |
+   | `SMTP_FROM` | `Your Shop Name <noreply@yourshop.com>` |
 
-   Caveats: mail comes from a `@gmail.com` address (not shop-branded), and
-   Gmail's free tier caps at ~500 emails/day (plenty for one shop).
+Note the Cloudflare forward is only doing the one-time verification in step
+5 — the app password (step 1) and the domain alias (steps 2–5) are separate
+concerns. If you don't need a branded sender, skip steps 2–5 entirely and
+just use the Gmail address itself as both `SMTP_FROM` and `SMTP_USERNAME`.
 
-   **If "App Passwords" isn't available on that page**, it's one of:
-   - 2-Step Verification isn't actually on yet (recheck step 1 — it can
-     take a minute to propagate).
-   - It's a Google Workspace (work/school) account and the admin disabled
-     app passwords org-wide — use a personal `@gmail.com` account instead,
-     or ask the admin.
-   - Advanced Protection Program is enabled on the account — it disables
-     app passwords outright as a security measure.
-
-#### Option B — Gmail sending as your own domain (if you own one)
-
-Gives you a `noreply@yourshop.com` sender using the same Gmail app password
-above, no real mail server of your own needed:
-
-1. **Cloudflare (or any DNS host with email forwarding)**: create a routing
-   rule forwarding `noreply@yourshop.com` → your Gmail address. Note this is
-   **inbound-only** — it lets you receive/verify at that address, it is
-   *not* an outbound SMTP relay and can't be used as `SMTP_HOST` directly.
-2. **Gmail → Settings → Accounts and Import → Send mail as → Add another
-   email address** → enter `noreply@yourshop.com`.
-3. Gmail will ask for an SMTP relay to verify sending through — point it at
-   **Gmail's own server**, authenticating as yourself:
-   - SMTP Server: `smtp.gmail.com`, Port: `587` (TLS)
-   - Username: your Gmail address, Password: the app password from Option A
-4. Gmail emails a confirmation link to `noreply@yourshop.com`, which arrives
-   in your Gmail inbox via the Cloudflare forward — click it to finish.
-5. Configure the shop with the same `SMTP_USERNAME`/`SMTP_PASSWORD` as
-   Option A, but:
-
-   ```
-   SMTP_FROM="Your Shop Name <noreply@yourshop.com>"
-   ```
-
-   Since `yourshop.com` has no SPF/DKIM record authorizing Google to send on
-   its behalf, most inboxes will show "via gmail.com" next to the sender —
-   cosmetic, mail still delivers.
-
-#### Option C — a real transactional provider (most "proper")
-
-Verify `yourshop.com` with a provider like Brevo (free tier, 300/day), SES,
-Mailgun, or SendGrid — each walks you through adding **SPF and DKIM DNS
-records** (a couple of TXT/CNAME entries at your DNS host, e.g. Cloudflare).
-Once verified, use the provider's own SMTP host/port and an API-key-style
-username/password — no Gmail or app password involved, and no "via
-gmail.com" caveat since the domain is now properly authenticated.
+Since `yourshop.com` has no SPF/DKIM record authorizing Google to send on
+its behalf, most inboxes will show "via gmail.com" next to the sender —
+cosmetic, mail still delivers.
 
 ### Infrastructure (required for production)
 
