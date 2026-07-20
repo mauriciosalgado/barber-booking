@@ -1,5 +1,6 @@
 """All page state: authentication, the user's role, booking, and appointments."""
 
+import base64
 import dataclasses
 import os
 from calendar import monthrange
@@ -70,6 +71,7 @@ class Appt:
     id: int
     time: str  # "09:00"
     barber_name: str
+    group_id: str = ""  # non-empty when part of a weekly series
 
 
 @dataclasses.dataclass
@@ -179,11 +181,16 @@ class State(rx.State):
     is_verified: bool = False
     barber_id: int = 0  # > 0 when the logged-in user is a barber
 
-    auth_mode: str = "login"  # or "register"
+    auth_mode: str = "login"  # "login", "register", or "forgot"
     form_email: str = ""
     form_name: str = ""
     form_password: str = ""
     auth_error: str = ""
+
+    # --- password change (logged-in) ------------------------------------
+    pw_current: str = ""
+    pw_new: str = ""
+    pw_msg: str = ""
 
     # --- profile (edit your own name / phone) ----------------------------
     profile_name: str = ""
@@ -241,6 +248,10 @@ class State(rx.State):
     # --- logo (stored in the backend DB; changeable live, no restart) ----
     logo_version: str = ""  # cache-buster that changes when the logo changes
     logo_msg: str = ""
+    # Pending logo: held in state until the owner clicks "Guardar".
+    _pending_logo_b64: str = ""
+    _pending_logo_name: str = ""
+    _pending_logo_type: str = ""
 
     # --- computed --------------------------------------------------------
     @rx.var
@@ -263,7 +274,9 @@ class State(rx.State):
 
     @rx.var
     def logo_src(self) -> str:
-        """The logo URL the browser loads, cache-busted by its version."""
+        """Show pending upload as preview, or the live backend logo."""
+        if self._pending_logo_b64:
+            return f"data:{self._pending_logo_type};base64,{self._pending_logo_b64}"
         return f"{PUBLIC_API_URL}/settings/logo?v={self.logo_version}"
 
     @rx.var
@@ -457,6 +470,7 @@ class State(rx.State):
                         id=r["id"],
                         time=r["start_at"][11:16],
                         barber_name=names.get(r["barber_id"], "Barbeiro"),
+                        group_id=r.get("recurrence_group_id") or "",
                     )
                     for r in day_rows
                 ],
@@ -532,6 +546,11 @@ class State(rx.State):
 
     async def _load_theme(self, client: httpx.AsyncClient):
         """Load the shop's saved colours and logo so the site paints in them."""
+        # Clear any unsaved pending logo from a previous interaction.
+        self._pending_logo_b64 = ""
+        self._pending_logo_name = ""
+        self._pending_logo_type = ""
+        self.logo_msg = ""
         try:
             theme = (await client.get("/settings/theme")).json()
             self.brand = theme["brand"]
@@ -553,7 +572,8 @@ class State(rx.State):
     @rx.event
     async def save_theme(self):
         self.theme_msg = ""
-        async with httpx.AsyncClient(base_url=API_URL, timeout=5, headers=self._auth()) as client:
+        async with httpx.AsyncClient(base_url=API_URL, timeout=15, headers=self._auth()) as client:
+            # Save colours and headline.
             resp = await client.put(
                 "/settings/theme",
                 json={
@@ -562,31 +582,41 @@ class State(rx.State):
                     "headline": self.headline,
                 },
             )
-            self.theme_msg = (
-                "Alterações guardadas."
-                if resp.status_code == 200
-                else "Não foi possível guardar."
-            )
+            if resp.status_code != 200:
+                self.theme_msg = "Não foi possível guardar."
+                return
+
+            # Upload logo if one was staged.
+            if self._pending_logo_b64:
+                logo_data = base64.b64decode(self._pending_logo_b64)
+                logo_resp = await client.put(
+                    "/settings/logo",
+                    files={"file": (self._pending_logo_name, logo_data, self._pending_logo_type)},
+                )
+                if logo_resp.status_code == 200:
+                    self.logo_version = str(logo_resp.json()["logo_version"])
+                    self._pending_logo_b64 = ""
+                    self._pending_logo_name = ""
+                    self._pending_logo_type = ""
+                    self.logo_msg = ""
+                else:
+                    self.theme_msg = "Cores guardadas, mas o logótipo falhou."
+                    return
+
+            self.theme_msg = "Alterações guardadas."
 
     @rx.event
     async def upload_logo(self, files: list[rx.UploadFile]):
-        """Send a new logo to the backend; it applies to everyone at once."""
+        """Stage a new logo locally — it's sent to the backend on save."""
         self.logo_msg = ""
         if not files:
             return
         upload = files[0]
         data = await upload.read()
-        content_type = getattr(upload, "content_type", None) or "image/png"
-        async with httpx.AsyncClient(base_url=API_URL, timeout=15, headers=self._auth()) as client:
-            resp = await client.put(
-                "/settings/logo",
-                files={"file": (upload.filename, data, content_type)},
-            )
-        if resp.status_code == 200:
-            self.logo_version = str(resp.json()["logo_version"])
-            self.logo_msg = "Logótipo atualizado."
-        else:
-            self.logo_msg = "Não foi possível carregar a imagem."
+        self._pending_logo_b64 = base64.b64encode(data).decode()
+        self._pending_logo_name = upload.filename or "logo"
+        self._pending_logo_type = getattr(upload, "content_type", None) or "image/png"
+        self.logo_msg = "Imagem selecionada — guarde para aplicar."
 
     async def _load_hours(self, client: httpx.AsyncClient, barber_id: int):
         """Load a chair's weekly hours into the 7-day editor (all days present)."""
@@ -692,6 +722,38 @@ class State(rx.State):
     def set_auth_mode(self, mode: str):
         self.auth_mode = mode
         self.auth_error = ""
+
+    @rx.event
+    async def forgot_password(self):
+        """Ask the backend to email a reset link (always succeeds from the UI)."""
+        self.auth_error = ""
+        if not self.form_email.strip():
+            self.auth_error = "Introduza o seu email."
+            return
+        async with httpx.AsyncClient(base_url=API_URL, timeout=5) as client:
+            await client.post("/auth/forgot-password", json={"email": self.form_email})
+        self.auth_error = "Se o email existir, receberá instruções para repor a palavra-passe."
+
+    @rx.event
+    async def change_password(self):
+        """Change the current user's password (must know the old one)."""
+        self.pw_msg = ""
+        if len(self.pw_new) < 8:
+            self.pw_msg = "A nova palavra-passe deve ter pelo menos 8 caracteres."
+            return
+        async with httpx.AsyncClient(base_url=API_URL, timeout=5, headers=self._auth()) as client:
+            resp = await client.put(
+                "/auth/me/password",
+                json={"current_password": self.pw_current, "new_password": self.pw_new},
+            )
+        if resp.status_code == 200:
+            self.pw_msg = "Palavra-passe alterada."
+            self.pw_current = ""
+            self.pw_new = ""
+        elif resp.status_code == 403:
+            self.pw_msg = "Palavra-passe atual incorreta."
+        else:
+            self.pw_msg = "Não foi possível alterar. Tente novamente."
 
     @rx.event
     def set_form_name(self, value: str):
@@ -1028,6 +1090,7 @@ class State(rx.State):
         """Cancel every upcoming booking in a weekly series."""
         async with httpx.AsyncClient(base_url=API_URL, timeout=5, headers=self._auth()) as client:
             await client.delete(f"/appointments/series/{group_id}")
+            await self._load_my_appointments(client)
             await self._load_schedule(client, self.selected_barber)
             await self._fetch_slots(client)
 

@@ -283,7 +283,20 @@ def my_appointment_row(appt: Appt) -> rx.Component:
         rx.hstack(
             rx.icon("calendar-check", size=18, color=BRAND),
             rx.vstack(
-                rx.text(appt.time, weight="bold", color=INK, size="2"),
+                rx.hstack(
+                    rx.text(appt.time, weight="bold", color=INK, size="2"),
+                    rx.cond(
+                        appt.group_id != "",
+                        rx.badge(
+                            rx.icon("repeat", size=12),
+                            color_scheme="grass",
+                            variant="soft",
+                            radius="full",
+                        ),
+                    ),
+                    align="center",
+                    spacing="2",
+                ),
                 muted(f"com {appt.barber_name}", size="1"),
                 spacing="0",
                 align="start",
@@ -291,12 +304,25 @@ def my_appointment_row(appt: Appt) -> rx.Component:
             align="center",
             spacing="3",
         ),
-        rx.button(
-            "Cancelar",
-            on_click=State.cancel_appointment(appt.id),
-            variant="soft",
-            color_scheme="tomato",
-            size="1",
+        rx.hstack(
+            rx.cond(
+                appt.group_id != "",
+                rx.button(
+                    "Cancelar série",
+                    on_click=State.cancel_series(appt.group_id),
+                    variant="soft",
+                    color_scheme="tomato",
+                    size="1",
+                ),
+            ),
+            rx.button(
+                "Cancelar",
+                on_click=State.cancel_appointment(appt.id),
+                variant="soft",
+                color_scheme="tomato",
+                size="1",
+            ),
+            spacing="2",
         ),
     )
 
@@ -825,7 +851,7 @@ def color_field(label: str, value, on_change, presets) -> rx.Component:
 
 
 def logo_field() -> rx.Component:
-    """Show the current logo and let the owner upload a new one, live."""
+    """Show the current logo and let the owner pick a new one (applied on save)."""
     return rx.vstack(
         rx.text("Logótipo", weight="medium", size="2", color=INK),
         rx.hstack(
@@ -851,7 +877,6 @@ def logo_field() -> rx.Component:
                     "image/png": [".png"],
                     "image/jpeg": [".jpg", ".jpeg"],
                     "image/webp": [".webp"],
-                    "image/svg+xml": [".svg"],
                 },
                 max_files=1,
                 on_drop=State.upload_logo(
@@ -867,7 +892,7 @@ def logo_field() -> rx.Component:
             width="100%",
         ),
         rx.cond(State.logo_msg != "", muted(State.logo_msg)),
-        muted("PNG, JPEG, WEBP ou SVG — quadrado fica melhor (máx. 2 MB)."),
+        muted("PNG, JPEG ou WEBP — quadrado fica melhor (máx. 2 MB)."),
         spacing="2",
         width="100%",
         align="start",
@@ -959,6 +984,36 @@ def profile_card() -> rx.Component:
                 width="100%",
                 border_radius="14px",
             ),
+            rx.separator(size="4"),
+            rx.text("Alterar palavra-passe", weight="medium", size="2", color=INK),
+            rx.input(
+                placeholder="Palavra-passe atual",
+                type="password",
+                value=State.pw_current,
+                on_change=State.set_pw_current,
+                size="3",
+                width="100%",
+            ),
+            rx.input(
+                placeholder="Nova palavra-passe (mín. 8 caracteres)",
+                type="password",
+                value=State.pw_new,
+                on_change=State.set_pw_new,
+                size="3",
+                width="100%",
+            ),
+            rx.cond(
+                State.pw_msg != "",
+                rx.callout(State.pw_msg, icon="info", width="100%"),
+            ),
+            rx.button(
+                "Alterar palavra-passe",
+                on_click=State.change_password,
+                variant="soft",
+                size="3",
+                width="100%",
+                border_radius="14px",
+            ),
             spacing="4",
             width="100%",
         )
@@ -1001,24 +1056,61 @@ def auth_view() -> rx.Component:
                 size="3",
                 width="100%",
             ),
-            rx.input(
-                placeholder="Palavra-passe",
-                type="password",
-                value=State.form_password,
-                on_change=State.set_form_password,
-                size="3",
-                width="100%",
+            rx.cond(
+                State.auth_mode != "forgot",
+                rx.input(
+                    placeholder="Palavra-passe",
+                    type="password",
+                    value=State.form_password,
+                    on_change=State.set_form_password,
+                    size="3",
+                    width="100%",
+                ),
             ),
             rx.cond(
                 State.auth_error != "",
                 muted(State.auth_error, color=rx.color("tomato", 11)),
             ),
-            rx.button(
-                rx.cond(State.auth_mode == "login", "Entrar", "Criar conta"),
-                on_click=rx.cond(State.auth_mode == "login", State.login, State.register),
-                size="4",
-                width="100%",
-                border_radius="14px",
+            rx.cond(
+                State.auth_mode == "forgot",
+                rx.button(
+                    "Enviar email de recuperação",
+                    on_click=State.forgot_password,
+                    size="4",
+                    width="100%",
+                    border_radius="14px",
+                ),
+                rx.button(
+                    rx.cond(State.auth_mode == "login", "Entrar", "Criar conta"),
+                    on_click=rx.cond(State.auth_mode == "login", State.login, State.register),
+                    size="4",
+                    width="100%",
+                    border_radius="14px",
+                ),
+            ),
+            rx.cond(
+                State.auth_mode == "login",
+                rx.text(
+                    "Esqueceu a palavra-passe?",
+                    on_click=State.set_auth_mode("forgot"),
+                    size="2",
+                    color=BRAND,
+                    cursor="pointer",
+                    text_align="center",
+                    width="100%",
+                ),
+            ),
+            rx.cond(
+                State.auth_mode == "forgot",
+                rx.text(
+                    "Voltar ao início de sessão",
+                    on_click=State.set_auth_mode("login"),
+                    size="2",
+                    color=BRAND,
+                    cursor="pointer",
+                    text_align="center",
+                    width="100%",
+                ),
             ),
             spacing="4",
             width="100%",
