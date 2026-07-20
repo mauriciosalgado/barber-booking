@@ -768,6 +768,14 @@ class State(rx.State):
         self.form_password = value
 
     @rx.event
+    def set_pw_current(self, value: str):
+        self.pw_current = value
+
+    @rx.event
+    def set_pw_new(self, value: str):
+        self.pw_new = value
+
+    @rx.event
     def set_manual_name(self, value: str):
         self.manual_name = value
 
