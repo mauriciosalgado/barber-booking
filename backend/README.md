@@ -1,4 +1,4 @@
-# Backend — Booking API
+# Backend
 
 FastAPI + SQLModel REST API with a built-in admin console at `/admin` (SQLAdmin).
 
@@ -6,30 +6,30 @@ FastAPI + SQLModel REST API with a built-in admin console at `/admin` (SQLAdmin)
 
 ```
 app/
-├── main.py           app entry point, router wiring
-├── config.py         all settings (from environment)
+├── main.py           entry point, router wiring
+├── config.py         settings (from environment)
 ├── database.py       engine + session dependency
-├── security.py       bcrypt hashing, JWT creation/validation, auth guards
-├── email.py          SMTP send helper
-├── limiter.py        rate limiting setup
+├── security.py       bcrypt, JWT, auth guards
+├── email.py          SMTP helper
+├── limiter.py        rate limiting
 ├── seed.py           first-start seeding (owner, barber, services, logo)
 ├── scheduling.py     slot generation (pure logic, no I/O)
-├── availability.py   open-slot computation (hours − lunch − booked − closures − past)
-├── admin.py          /admin console (SQLAdmin views + validation hooks)
-├── models/           one file per entity — DB table + request/response schemas
-└── routers/          one file per resource — auth, barbers, appointments, closures, services, settings, system
-tests/                pytest integration + unit tests
+├── availability.py   open slots (hours − lunch − booked − closures − past)
+├── admin.py          /admin console (SQLAdmin views + validation)
+├── models/           one file per entity (table + schemas)
+└── routers/          one file per resource (auth, barbers, appointments, closures, services, settings, system)
+tests/                pytest suite
 ```
 
 ## Run locally
 
 ```bash
 uv sync
-cp .env.example .env    # fill in all values
-uv run serve            # starts on http://127.0.0.1:8000 with auto-reload
+cp .env.example .env
+uv run serve
 ```
 
-- API docs → http://127.0.0.1:8000/docs (use **Authorize** to log in as the owner)
+- API docs → http://127.0.0.1:8000/docs
 - Admin console → http://127.0.0.1:8000/admin
 
 ## Tests
@@ -38,8 +38,8 @@ uv run serve            # starts on http://127.0.0.1:8000 with auto-reload
 uv run pytest
 ```
 
-107 tests against a throwaway SQLite DB covering: slot logic, booking rules,
-email verification, password reset, rate limiting, closures, services, recurrence, and permissions.
+107 tests covering: slot logic, booking rules, email verification, password
+reset, closures, services, recurrence, and permissions.
 
 ## Configuration
 
@@ -47,36 +47,36 @@ All values in `.env.example` are required — a missing one stops the app at sta
 
 | Variable | Purpose |
 | -------- | ------- |
-| `SHOP_NAME` | Displayed in the header, emails, API title |
-| `SHOP_TIMEZONE` | IANA timezone for all scheduling logic |
+| `SHOP_NAME` | Header, emails, API title |
+| `SHOP_TIMEZONE` | IANA timezone for scheduling |
 | `OWNER_EMAIL`, `OWNER_NAME`, `OWNER_PASSWORD` | Admin account, seeded on first start |
-| `JWT_SECRET` | Signs all tokens — generate with `openssl rand -hex 32` |
+| `JWT_SECRET` | Signs all tokens — `openssl rand -hex 32` |
 | `DATABASE_URL` | `sqlite:///./barber.db` (dev) or `postgresql://…` (prod) |
 | `CORS_ORIGINS` | Allowed browser origins, comma-separated or `*` |
-| `PUBLIC_BASE_URL` | Used in email links (verification, password reset) |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Outgoing mail; empty host disables sending |
-| `SMTP_STARTTLS`, `SMTP_USERNAME`, `SMTP_PASSWORD` | TLS + auth for production SMTP |
+| `PUBLIC_BASE_URL` | Used in email links |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Outgoing mail; empty host = disabled |
+| `SMTP_STARTTLS`, `SMTP_USERNAME`, `SMTP_PASSWORD` | TLS + auth for production |
 | `SHOP_BRAND`, `SHOP_BACKGROUND`, `SHOP_HEADLINE` | Initial theme (owner overrides from UI) |
-| `SHOP_LOGO_PATH` | Optional file to seed the logo on first start |
+| `SHOP_LOGO_PATH` | Optional: seed logo from a file on first start |
 
-## Key design points
+## Design
 
-- **Availability is computed live** — never stored. Working hours minus lunch, minus booked slots, minus closures, minus the past.
-- **Fixed slot grid** — step is the GCD of the barber's service durations. A 15-min booking never blocks a 30-min service from a valid start.
-- **1-hour booking lead** — customers can't grab last-minute slots.
-- **1-hour cancel cut-off** — customers can't cancel too late; staff always can.
-- **Rate limiting** — login (10/min), register (5/min), password reset (3/min).
-- **Cascade deletes** — removing a barber removes their hours/appointments.
-- **SQLite foreign keys enabled** via PRAGMA so dev matches Postgres behaviour.
+- **Availability computed live** — never stored.
+- **Fixed slot grid** — GCD of service durations. Short bookings never block longer ones.
+- **1h booking lead** — no last-minute slots.
+- **1h cancel cut-off** — customers can't cancel too late; staff always can.
+- **Rate limiting** — login 10/min, register 5/min, reset 3/min.
+- **Cascade deletes** — removing a barber removes their hours and bookings.
+- **SQLite FK enabled** via PRAGMA so dev matches Postgres.
 
 ## Auth
 
-- Passwords hashed with **bcrypt**.
-- Login returns a **JWT** (HS256, 24h TTL, signed with `JWT_SECRET`).
-- Verification and password-reset use the same JWT machinery with a `purpose` claim — tokens are not interchangeable.
-- Admin console uses **session cookies** (same email/password, requires `is_admin`).
+- Passwords: **bcrypt**.
+- Login: **JWT** (HS256, 24h, signed with `JWT_SECRET`).
+- Verification + password-reset: same JWT with a `purpose` claim — not interchangeable.
+- Admin console: **session cookies** (same credentials, requires `is_admin`).
 
 ## Health probes
 
-- `GET /health` — liveness (process is up)
-- `GET /health/ready` — readiness (database reachable)
+- `GET /health` — liveness
+- `GET /health/ready` — readiness (DB reachable)

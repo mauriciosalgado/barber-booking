@@ -26,6 +26,7 @@ from app.models import (
     Barber,
     Closure,
     Service,
+    Setting,
     User,
     Weekday,
     WorkingHours,
@@ -249,6 +250,14 @@ class ClosureAdmin(ModelView, model=Closure):
                 session.commit()
 
 
+class SettingAdmin(ModelView, model=Setting):
+    name = "Setting"
+    icon = "fa-solid fa-gear"
+    column_list = ["key", "value"]
+    column_sortable_list = ["key"]
+    column_searchable_list = ["key"]
+
+
 def setup_admin(app: FastAPI) -> None:
     """Mount the admin UI at /admin, protected by the owner login."""
     auth = AdminAuth(secret_key=get_settings().jwt_secret)
@@ -260,5 +269,6 @@ def setup_admin(app: FastAPI) -> None:
         WorkingHoursAdmin,
         AppointmentAdmin,
         ClosureAdmin,
+        SettingAdmin,
     ):
         admin.add_view(view)

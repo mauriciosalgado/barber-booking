@@ -49,7 +49,7 @@ Edit the `environment` block in `docker-compose.yml`. Everything is in one place
 > someone guesses it they can log in as any user. Generate one per shop with
 > `openssl rand -hex 32`.
 
-### Branding (optional — owner can change live from the UI)
+### Branding (optional — owner changes live from the UI)
 
 | Variable | Default |
 | -------- | ------- |
@@ -58,7 +58,7 @@ Edit the `environment` block in `docker-compose.yml`. Everything is in one place
 | `SHOP_HEADLINE` | `"A sua cadeira está à espera"` |
 
 These seed the database on first start. After that, the owner controls
-colours, logo, and headline from the **Aparência** card in the UI.
+colours, logo, and headline from the UI.
 
 ### Email (required for production)
 
@@ -95,7 +95,7 @@ In production, point at a real provider (Brevo, Mailgun, SES, etc.) with
 ### HTTPS
 
 The app does not terminate TLS. Put a reverse proxy in front (Caddy, nginx,
-Traefik, k8s Ingress, cloud LB) and set all `*_URL` vars to `https://` addresses.
+Traefik, k8s Ingress, cloud LB) and set all `*_URL` vars to `https://`.
 Lock `CORS_ORIGINS` to the frontend's real origin.
 
 ### Production database
@@ -118,16 +118,17 @@ DATABASE_URL: "postgresql://user:pass@host:5432/barber"
 
 ## How it works
 
-- **Scheduling** — working hours minus lunch, minus booked, minus closures,
-  minus the past. All services share one grid (step = GCD of service lengths).
-- **Services** — each barber has a menu (e.g. Corte 30min, Barba 15min). The
-  owner edits them live; bookings snapshot the duration.
-- **Weekly recurrence** — optionally, customers repeat a booking weekly (barber
-  controls the cap).
+- **Scheduling** — working hours − lunch − booked − closures − past. All
+  services share one grid (step = GCD of service lengths).
+- **Services** — each barber has a menu (e.g. Corte 30min, Barba 15min).
+  Bookings snapshot the duration.
+- **Weekly recurrence** — customers repeat a booking weekly (barber controls cap).
 - **Email verification** — new accounts must confirm before booking.
-- **Password reset** — `POST /auth/forgot-password` → email → `POST /auth/reset-password`.
+- **Password reset** — forgot-password → email link → reset-password.
 - **Rate limiting** — 10/min login, 5/min register, 3/min reset.
-- **Closures** — the owner blocks a period; overlapping bookings are cancelled.
+- **Closures** — owner blocks a period; overlapping bookings are cancelled.
+- **Admin console** — full CRUD over users, barbers, services, hours,
+  appointments, closures, and settings at `/admin`.
 
 ## Development without Docker
 
@@ -139,5 +140,5 @@ cd frontend && uv sync && API_URL=http://localhost:8000 uv run reflex run
 ## Deploy
 
 Both images are stateless, configured by env vars, and expose `/health` +
-`/health/ready` for orchestrator probes. They drop into any container platform
-(k8s, ECS, etc.). Supply secrets through your platform's secret store.
+`/health/ready` for orchestrator probes. Supply secrets through your platform's
+secret store.
