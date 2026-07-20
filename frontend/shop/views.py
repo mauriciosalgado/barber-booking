@@ -1069,7 +1069,14 @@ def auth_view() -> rx.Component:
             ),
             rx.cond(
                 State.auth_error != "",
-                muted(State.auth_error, color=rx.color("tomato", 11)),
+                muted(
+                    State.auth_error,
+                    color=rx.cond(
+                        State.auth_mode == "forgot",
+                        rx.color("grass", 11),
+                        rx.color("tomato", 11),
+                    ),
+                ),
             ),
             rx.cond(
                 State.auth_mode == "forgot",

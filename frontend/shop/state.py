@@ -716,6 +716,9 @@ class State(rx.State):
         self.profile_name = ""
         self.profile_phone = ""
         self.profile_msg = ""
+        self.pw_current = ""
+        self.pw_new = ""
+        self.pw_msg = ""
         self.auth_mode = "login"
 
     @rx.event
