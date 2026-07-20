@@ -88,7 +88,6 @@ In production, point at a real provider (Brevo, Mailgun, SES, etc.) with
 | -------- | ----------- |
 | `API_URL` | `http://backend:8000` |
 | `PUBLIC_API_URL` | `http://localhost:8000` |
-| `REFLEX_API_URL` | `http://localhost:8001` |
 | `ADMIN_URL` | `http://localhost:8000/admin` |
 
 ### 5. HTTPS

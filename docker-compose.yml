@@ -50,8 +50,6 @@ services:
       # Browser-facing backend URL, used for the <img> logo and favicon the
       # browser loads directly (the logo is stored in and served by the backend).
       PUBLIC_API_URL: http://localhost:8000
-      # Public URL the browser uses to reach Reflex's event backend.
-      REFLEX_API_URL: http://localhost:8001
       # Dev only: link the verify banner straight to Mailpit's caught inbox.
       MAIL_INBOX_URL: http://localhost:8025
       # Browser-facing link to the backend admin console (backend's public URL).
