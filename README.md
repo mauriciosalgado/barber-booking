@@ -142,3 +142,37 @@ cd frontend && uv sync && API_URL=http://localhost:8000 uv run reflex run
 Both images are stateless, configured by env vars, and expose `/health` +
 `/health/ready` for orchestrator probes. Supply secrets through your platform's
 secret store.
+
+## Known limitations
+
+These are deliberate tradeoffs for a small, single-shop deployment — not bugs.
+Revisit them only if your situation changes.
+
+- **One backend replica.** The rate limiter (`slowapi`) stores counts in
+  memory. With a single replica this is correct; with more than one, each
+  pod counts independently, so limits get proportionally more lenient
+  (never more strict, so this is not a security hole — just less precise).
+  A shared backend (e.g. Redis) would be needed to scale horizontally.
+- **JWTs aren't revocable.** Logout is client-side only, and changing or
+  resetting a password does not invalidate previously-issued access tokens
+  — they remain valid until they naturally expire (24h). This is a standard
+  stateless-JWT tradeoff. If you need instant revocation, you'd need a
+  server-side token blocklist or session store.
+- **Frontend runs in Reflex dev mode.** `reflex run --env prod --single-port`
+  was tested and works on the surface, but throws a repeated internal
+  `AssertionError` (a WebSocket-vs-static-file routing bug in how Reflex
+  multiplexes both on one port). Dev mode is verified stable with zero
+  errors across every flow, just heavier/unoptimized. Don't switch without
+  first resolving that bug or splitting frontend/backend behind a proxy
+  that routes WebSocket traffic separately (e.g. Traefik).
+- **SQLite by default.** Fine for one shop's traffic; a single file, no
+  separate DB server to run. Swap to Postgres (see above) if you need
+  concurrent writers or managed backups.
+- **No schema migrations.** `create_all()` only adds new tables, never new
+  columns to existing ones. A schema change on a live database needs a
+  manual migration or a DB reset. Adopt Alembic if the schema will keep
+  evolving after go-live.
+- **No Kubernetes manifests yet.** Only `docker-compose.yml` exists today.
+  The images are already k8s-ready (stateless, env-configured, proper
+  liveness/readiness probes) — Deployment/Service/Ingress/PVC/Secret YAML
+  would need to be written when you're ready to move off Compose.
