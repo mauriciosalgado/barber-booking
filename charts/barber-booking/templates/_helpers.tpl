@@ -75,3 +75,13 @@ where there's no Ingress at all and the app is reached via plain-http
 {{- define "barber-booking.frontendUrl" -}}
 {{- .Values.urls.frontendUrl | default (printf "https://%s" .Values.ingress.host) -}}
 {{- end -}}
+
+{{/* Name of the Secret holding JWT_SECRET/OWNER_PASSWORD/SMTP_*. */}}
+{{- define "barber-booking.backendSecretName" -}}
+{{- .Values.existingSecret | default (printf "%s-backend" (include "barber-booking.fullname" .)) -}}
+{{- end -}}
+
+{{/* Name of the Secret holding the built-in Postgres's POSTGRES_PASSWORD. */}}
+{{- define "barber-booking.postgresSecretName" -}}
+{{- .Values.postgresql.existingSecret | default (printf "%s-postgres" (include "barber-booking.fullname" .)) -}}
+{{- end -}}

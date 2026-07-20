@@ -146,11 +146,10 @@ secret store.
 ### Kubernetes
 
 A Helm chart lives in `charts/barber-booking/` — one install per shop, with
-an optional built-in Postgres. See `charts/barber-booking/README.md` for
-both the production path (real registry + Ingress + TLS) and a one-command
-local path with no registry at all: `./scripts/deploy-local.sh` builds the
-images and loads them straight into a local cluster (kind/minikube/k3d/Docker
-Desktop).
+an optional built-in Postgres, designed to be deployed via GitOps (e.g.
+ArgoCD referencing it directly from this repo) or `helm install` by hand.
+See `charts/barber-booking/README.md` for the ArgoCD setup, the first-shop
+checklist, and secrets handling.
 
 ## Known limitations
 

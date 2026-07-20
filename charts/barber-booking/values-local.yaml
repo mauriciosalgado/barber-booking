@@ -1,6 +1,14 @@
-# Values for local, no-registry deployment via scripts/deploy-local.sh.
-# Not meant for a real shop — dev-only secrets, no TLS, images built and
-# loaded straight from your machine's Docker daemon into the cluster.
+# Values for trying this out on a local, no-registry cluster (kind/minikube/
+# k3d/Docker Desktop). Not meant for a real shop — dev-only secrets, no TLS.
+#
+#   docker build -t barber-booking-backend:dev ./backend
+#   docker build -t barber-booking-frontend:dev ./frontend
+#   minikube image load barber-booking-backend:dev   # or: kind load docker-image ...
+#   minikube image load barber-booking-frontend:dev
+#   helm upgrade --install shop ./charts/barber-booking -f values-local.yaml \
+#     --set image.backend.tag=dev --set image.frontend.tag=dev
+#   kubectl port-forward svc/shop-barber-booking-frontend 3000:3000 8001:8001
+#   kubectl port-forward svc/shop-barber-booking-backend 8000:8000
 
 jwtSecret: "dev-only-secret-change-me"
 
@@ -10,12 +18,14 @@ shop:
     email: "owner@example.com"
     password: "change-me"
 
-# Never try to pull — the images only exist locally (built + loaded by
-# scripts/deploy-local.sh), there is no registry to pull them from.
+# Never try to pull — the images only exist locally (built + loaded above),
+# there is no registry to pull them from.
 image:
   backend:
+    repository: barber-booking-backend
     pullPolicy: Never
   frontend:
+    repository: barber-booking-frontend
     pullPolicy: Never
 
 # Most local clusters (kind/minikube/k3d) don't have an Ingress controller

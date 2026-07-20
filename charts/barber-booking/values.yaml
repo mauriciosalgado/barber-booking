@@ -20,6 +20,15 @@ shop:
 # Generate one per shop: openssl rand -hex 32
 jwtSecret: ""
 
+# For GitOps: instead of putting jwtSecret/shop.owner.password/email.smtp*
+# above in a values file committed to git, create a Secret out-of-band
+# (kubectl, SOPS, sealed-secrets, External Secrets Operator, your vault of
+# choice — whatever your GitOps setup already uses) with these four keys:
+#   JWT_SECRET, OWNER_PASSWORD, SMTP_USERNAME, SMTP_PASSWORD
+# then point this at its name. When set, the chart does not render its own
+# Secret and the jwtSecret/owner.password/smtp* values above are ignored.
+existingSecret: ""
+
 # --- Container images --------------------------------------------------
 image:
   backend:
@@ -94,8 +103,12 @@ postgresql:
   image: postgres:16-alpine
   database: barber
   username: barber
-  # Required if postgresql.enabled is true. No default on purpose.
+  # Required if postgresql.enabled is true and existingSecret below is empty.
   password: ""
+  # Same idea as the top-level existingSecret: a pre-created Secret with a
+  # POSTGRES_PASSWORD key, so the DB password doesn't have to live in git
+  # either. When set, postgresql.password above is ignored.
+  existingSecret: ""
   storage: 2Gi
   storageClassName: ""
   resources:

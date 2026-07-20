@@ -1,62 +1,137 @@
 # barber-booking Helm chart
 
 One install = one shop. Install it again with a different release name and
-`values-<shop>.yaml` for another shop on the same cluster.
+values file for another shop on the same cluster.
 
-## Local, no-registry deployment
+## GitOps (ArgoCD)
 
-For trying this out on `kind`, `minikube`, `k3d`, or Docker Desktop's
-built-in Kubernetes — no image registry, no CI pipeline, no pull
-credentials:
+This chart is designed to be referenced directly from your GitOps repo as a
+"local"/path source — no chart repository or `helm push` needed, ArgoCD just
+renders `charts/barber-booking` out of this git repo at whatever revision you
+pin.
 
-```bash
-./scripts/deploy-local.sh
-```
+Two things ArgoCD does **not** do for you, which stay outside this chart:
 
-This builds `backend/` and `frontend/` with `docker build`, loads the images
-straight into your cluster (`kind load docker-image` / `minikube image
-load` / `k3d image import`, or nothing extra needed on Docker Desktop, whose
-cluster shares your local Docker daemon), then runs `helm upgrade --install`
-using `values-local.yaml` (dev-only secrets, no Ingress, plain http). Reach
-it with `kubectl port-forward` — the script prints the exact commands.
+1. **Building/pushing images.** Helm/ArgoCD only deploy manifests — your CI
+   still needs to build `backend/` and `frontend/` and push them to a
+   registry ArgoCD's cluster can pull from. Point `image.*.repository/tag` at
+   the result.
+2. **Secrets.** Don't put `jwtSecret`, `shop.owner.password`, or SMTP
+   credentials in a values file committed to your GitOps repo. Instead:
+   - create a Kubernetes Secret named e.g. `<shop>-backend-secret` with keys
+     `JWT_SECRET`, `OWNER_PASSWORD`, `SMTP_USERNAME`, `SMTP_PASSWORD` — via
+     whatever your GitOps setup already uses for this (Sealed Secrets,
+     External Secrets Operator, SOPS, a cloud secret manager, or just
+     `kubectl create secret` once, out of band), and
+   - set `existingSecret: <that name>` in this shop's values. The chart then
+     skips creating its own Secret and reads from yours. Same pattern for the
+     built-in Postgres's password via `postgresql.existingSecret`.
 
-Run it again anytime you change code — it rebuilds and re-deploys.
-
-## Production deployment
-
-Requires a real image registry (build/push `backend/` and `frontend/` there
-first) and an Ingress controller with TLS (e.g. nginx-ingress + cert-manager).
-
-```bash
-helm install ribeiro ./charts/barber-booking -f values-ribeiro.yaml
-```
-
-Minimum required values (see `values.yaml` for the full, commented list):
+Example `Application`, in your GitOps repo:
 
 ```yaml
-jwtSecret: "" # openssl rand -hex 32
-shop:
-  name: "Ribeiro Barbeiro"
-  owner:
-    email: "me@myshop.pt"
-    password: "a strong password"
-image:
-  backend:
-    repository: ghcr.io/you/barber-booking-backend
-    tag: "v1.0.0"
-  frontend:
-    repository: ghcr.io/you/barber-booking-frontend
-    tag: "v1.0.0"
-ingress:
-  host: shop.example.com
-  apiHost: api.shop.example.com
-email:
-  smtpHost: "smtp.your-provider.com"
-  smtpUsername: "..."
-  smtpPassword: "..."
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ribeiro-barbeiro
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/you/barber-booking.git
+    targetRevision: main # or a tag, e.g. v1.0.0
+    path: charts/barber-booking
+    helm:
+      valueFiles:
+        - $values/shops/ribeiro/values.yaml # values live in your GitOps repo
+  sources: # if values live in a separate repo, use the multi-source form:
+    - repoURL: https://github.com/you/barber-booking.git
+      targetRevision: main
+      path: charts/barber-booking
+    - repoURL: https://github.com/you/gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ribeiro-barbeiro
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
 ```
 
-### Database
+(The two `source`/`sources` blocks above are alternatives — use `source`
+with an inline `valueFiles` path if your values live in the same repo as
+this chart, or the multi-source `sources` form if they live in your
+separate GitOps repo, which is the common pattern.)
+
+One `Application` per shop; each just needs its own values file and its own
+`existingSecret`.
+
+## First shop — what to configure
+
+1. **Build and push images** to a registry your cluster can pull from (this
+   is outside the chart — your existing CI does this):
+   `ghcr.io/you/barber-booking-backend:v1.0.0` and `...-frontend:v1.0.0`.
+2. **DNS**: point two hostnames at your Ingress controller's load balancer —
+   one for the website, one for the API (e.g. `shop.example.com` and
+   `api.shop.example.com`). They must be different hosts (see `values.yaml`
+   comments on `ingress.host`/`ingress.apiHost` for why).
+3. **TLS**: either have cert-manager issue a cert automatically (uncomment
+   the `cert-manager.io/cluster-issuer` annotation in `ingress.annotations`)
+   or bring your own cert as a Secret named `ingress.tls.secretName`.
+4. **Secrets**: create the backend Secret out-of-band (see GitOps section
+   above) with `JWT_SECRET` (generate: `openssl rand -hex 32`),
+   `OWNER_PASSWORD` (the owner's login password), and `SMTP_USERNAME`/
+   `SMTP_PASSWORD` if your mail provider needs them. Reference it via
+   `existingSecret`.
+5. **Values file** for the shop — minimum needed (everything else has
+   sensible defaults; see `values.yaml` for the full commented list):
+
+   ```yaml
+   existingSecret: "ribeiro-backend-secret"
+
+   shop:
+     name: "Ribeiro Barbeiro"
+     owner:
+       name: "Paquito"
+       email: "paquito@ribeirobarbeiro.pt"
+     # brand/background/headline are optional — the owner can change all
+     # three live from the UI after first login anyway.
+
+   image:
+     backend:
+       repository: ghcr.io/you/barber-booking-backend
+       tag: "v1.0.0"
+     frontend:
+       repository: ghcr.io/you/barber-booking-frontend
+       tag: "v1.0.0"
+
+   ingress:
+     className: nginx # or whatever your cluster's Ingress controller is
+     host: shop.ribeirobarbeiro.pt
+     apiHost: api.ribeirobarbeiro.pt
+
+   email:
+     smtpHost: "smtp.your-provider.com"
+     smtpFrom: "no-reply@ribeirobarbeiro.pt"
+     # smtpUsername/smtpPassword come from existingSecret, not here.
+   ```
+
+6. **Sync** in ArgoCD (or let `syncPolicy.automated` do it). Watch the
+   rollout: `kubectl get pods -n ribeiro-barbeiro -w`.
+7. **Log in** as the owner at `https://shop.ribeirobarbeiro.pt` with the
+   email above and the password from your Secret, and finish setup from the
+   UI (logo, brand colours, working hours, services — see the root
+   `README.md`'s "How it works").
+
+That's the whole first-shop checklist. Everything else (database choice,
+replicas, resource limits, CORS) has a working default — only touch it if
+you have a specific reason to (see below).
+
+## Database
 
 SQLite (default) needs nothing extra — a 1Gi PVC is created automatically.
 For Postgres, either point at a managed instance:
@@ -74,10 +149,16 @@ database:
   type: postgres
 postgresql:
   enabled: true
-  password: "a strong password"
+  existingSecret: "ribeiro-postgres-secret" # POSTGRES_PASSWORD key
 ```
 
-### Why backend/frontend replicas stay at 1
+## Local testing (optional, no registry)
+
+Not part of the GitOps flow above — just for trying the chart out by hand on
+`kind`/`minikube`/`k3d`/Docker Desktop. See the commands at the top of
+`values-local.yaml`.
+
+## Why backend/frontend replicas stay at 1
 
 - **Backend**: SQLite is a single file (one writer at a time), and the login
   rate limiter counts in memory per pod. Scaling needs Postgres *and* a

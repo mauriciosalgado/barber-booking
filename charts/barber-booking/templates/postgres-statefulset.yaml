@@ -31,7 +31,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "barber-booking.fullname" . }}-postgres
+                  name: {{ include "barber-booking.postgresSecretName" . }}
                   key: POSTGRES_PASSWORD
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata

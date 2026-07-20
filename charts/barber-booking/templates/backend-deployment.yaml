@@ -33,7 +33,7 @@ spec:
             - configMapRef:
                 name: {{ include "barber-booking.fullname" . }}-backend
             - secretRef:
-                name: {{ include "barber-booking.fullname" . }}-backend
+                name: {{ include "barber-booking.backendSecretName" . }}
           env:
             {{- if and (eq .Values.database.type "postgres") .Values.postgresql.enabled }}
             # Must come before DATABASE_URL below — Kubernetes only expands
@@ -42,7 +42,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "barber-booking.fullname" . }}-postgres
+                  name: {{ include "barber-booking.postgresSecretName" . }}
                   key: POSTGRES_PASSWORD
             {{- end }}
             - name: DATABASE_URL
