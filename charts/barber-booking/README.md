@@ -136,20 +136,22 @@ you have a specific reason to (see below).
 
 If `image.*.repository` points at a private image (e.g. a GHCR package set
 to private), the cluster needs an `imagePullSecret` or pulls will fail with
-`ImagePullBackOff`. Two ways to configure, pick one:
+`ImagePullBackOff`. Two ways to configure — pick **one**, not both:
 
-1. **GitOps-friendly (preferred)** — create the pull secret out-of-band,
-   same as `existingSecret`, so the PAT never lands in a values file:
+1. **GitOps-friendly (preferred)** — create the pull secret yourself
+   out-of-band, so the PAT never lands in a values file:
 
    ```sh
    kubectl create secret docker-registry ghcr-pull \
      --docker-server=ghcr.io \
      --docker-username=<github-username> \
-     --docker-password=<PAT with read:packages scope> \
+     --docker-password="<personal access token, read:packages scope>" \
      --namespace ribeiro-barbeiro
    ```
 
-   Then reference it:
+   Then just reference it by name in values — leave `imageCredentials`
+   untouched (its `password` is empty by default, so the chart renders no
+   Secret of its own; there's nothing extra to "disable"):
 
    ```yaml
    imagePullSecrets:
