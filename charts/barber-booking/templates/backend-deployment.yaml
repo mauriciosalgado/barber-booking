@@ -18,6 +18,7 @@ spec:
       labels:
         app: {{ include "barber-booking.fullname" . }}-backend
     spec:
+      {{- include "barber-booking.imagePullSecrets" . | nindent 6 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000 # matches the "app" user created in backend/Dockerfile

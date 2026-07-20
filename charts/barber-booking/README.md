@@ -75,6 +75,7 @@ One `Application` per shop; each just needs its own values file and its own
 1. **Build and push images** to a registry your cluster can pull from (this
    is outside the chart — your existing CI does this):
    `ghcr.io/you/barber-booking-backend:v1.0.0` and `...-frontend:v1.0.0`.
+   If that registry/package is private, see "Private registry access" below.
 2. **DNS**: point two hostnames at your Ingress controller's load balancer —
    one for the website, one for the API (e.g. `shop.example.com` and
    `api.shop.example.com`). They must be different hosts (see `values.yaml`
@@ -130,6 +131,45 @@ One `Application` per shop; each just needs its own values file and its own
 That's the whole first-shop checklist. Everything else (database choice,
 replicas, resource limits, CORS) has a working default — only touch it if
 you have a specific reason to (see below).
+
+## Private registry access
+
+If `image.*.repository` points at a private image (e.g. a GHCR package set
+to private), the cluster needs an `imagePullSecret` or pulls will fail with
+`ImagePullBackOff`. Two ways to configure, pick one:
+
+1. **GitOps-friendly (preferred)** — create the pull secret out-of-band,
+   same as `existingSecret`, so the PAT never lands in a values file:
+
+   ```sh
+   kubectl create secret docker-registry ghcr-pull \
+     --docker-server=ghcr.io \
+     --docker-username=<github-username> \
+     --docker-password=<PAT with read:packages scope> \
+     --namespace ribeiro-barbeiro
+   ```
+
+   Then reference it:
+
+   ```yaml
+   imagePullSecrets:
+     - name: ghcr-pull
+   ```
+
+2. **Chart-managed** — let the chart create the secret from a PAT set
+   directly in values. Simpler, but the PAT then lives wherever this value
+   is set — only use this with a values file that itself stays out of git
+   (`--set`, or a GitOps secret tool that injects the value at apply time):
+
+   ```yaml
+   imageCredentials:
+     registry: ghcr.io
+     username: <github-username>
+     password: <PAT with read:packages scope>
+   ```
+
+A GitHub PAT for GHCR only needs the `read:packages` scope (classic PAT), or
+for a fine-grained PAT, "Packages: read-only" on the relevant repo/org.
 
 ## Database
 

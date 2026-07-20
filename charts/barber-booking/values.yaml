@@ -40,6 +40,31 @@ image:
     tag: latest
     pullPolicy: IfNotPresent
 
+# --- Private registry access --------------------------------------------
+# Only needed if image.*.repository is a private registry (e.g. GHCR with a
+# private package). Two ways to configure, pick one:
+#
+# 1. GitOps-friendly (preferred): create the pull secret out-of-band, the
+#    same way as existingSecret above, then just name it here:
+#      kubectl create secret docker-registry ghcr-pull \
+#        --docker-server=ghcr.io \
+#        --docker-username=<github-username> \
+#        --docker-password=<PAT with read:packages> \
+#        --namespace <your-namespace>
+imagePullSecrets: []
+# imagePullSecrets:
+#   - name: ghcr-pull
+#
+# 2. Let the chart create the secret for you from a PAT set here. Simpler,
+#    but the PAT then lives in whatever values file sets it — only use this
+#    with a values file that stays out of git (e.g. via --set, or a
+#    GitOps secret tool that injects it at apply time rather than storing it
+#    in the values file itself).
+imageCredentials:
+  registry: "" # e.g. ghcr.io
+  username: ""
+  password: "" # PAT with read:packages (or equivalent) scope
+
 # --- Networking --------------------------------------------------------
 # The frontend needs TWO public hostnames:
 #   host    - the booking website (Reflex UI + its own websocket backend)

@@ -85,3 +85,21 @@ where there's no Ingress at all and the app is reached via plain-http
 {{- define "barber-booking.postgresSecretName" -}}
 {{- .Values.postgresql.existingSecret | default (printf "%s-postgres" (include "barber-booking.fullname" .)) -}}
 {{- end -}}
+
+{{/*
+imagePullSecrets for the pod spec: whatever's listed explicitly in
+.Values.imagePullSecrets, plus a chart-managed one if imageCredentials.password
+is set (see image-pull-secret.yaml). Renders nothing if neither is configured.
+*/}}
+{{- define "barber-booking.imagePullSecrets" -}}
+{{- $secrets := .Values.imagePullSecrets -}}
+{{- if .Values.imageCredentials.password -}}
+{{- $secrets = append $secrets (dict "name" (printf "%s-registry" (include "barber-booking.fullname" .))) -}}
+{{- end -}}
+{{- if $secrets -}}
+imagePullSecrets:
+{{- range $secrets }}
+  - name: {{ .name }}
+{{- end }}
+{{- end -}}
+{{- end -}}
