@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     cors_origins: str
     # Base URL the app is reached at, used to build links in emails.
     public_base_url: str
+    # Frontend URL used for email links (reset password, etc).
+    # Defaults to public_base_url if not set (works when backend proxies frontend).
+    frontend_url: str = ""
     # SMTP for transactional email; an empty host disables sending.
     smtp_host: str
     smtp_port: int

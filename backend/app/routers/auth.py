@@ -143,7 +143,8 @@ def forgot_password(
         select(User).where(User.email == data.email.strip().lower())
     ).first()
     if user and user.id is not None:
-        link = f"{get_settings().public_base_url}/auth/reset-password?token={create_reset_token(user.id)}"
+        base = get_settings().frontend_url or get_settings().public_base_url
+        link = f"{base}/reset-password?token={create_reset_token(user.id)}"
         try:
             send_email(
                 user.email, "Reset your password", f"Reset your password: {link}"

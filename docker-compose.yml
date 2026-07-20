@@ -15,7 +15,7 @@ services:
       - "8000:8000"
     environment:
       # --- Shop identity — change these for YOUR shop ------------------------
-      SHOP_NAME: "The Barber Shop"
+      SHOP_NAME: "Ribeiro Barbeiro"
       SHOP_TIMEZONE: "Europe/Lisbon"
       OWNER_NAME: "Owner"
       OWNER_EMAIL: "owner@theshop.com"
@@ -30,6 +30,7 @@ services:
       DATABASE_URL: "sqlite:////data/barber.db"
       CORS_ORIGINS: "*"
       PUBLIC_BASE_URL: "http://localhost:8000"
+      FRONTEND_URL: "http://localhost:3000"
       SMTP_HOST: "smtp"
       SMTP_PORT: "1025"
       SMTP_FROM: "no-reply@theshop.com"

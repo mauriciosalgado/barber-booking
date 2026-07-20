@@ -186,3 +186,58 @@ app = rx.App(
     ]
 )
 app.add_page(index, route="/", title="Marcar · Barbearia", on_load=[State.init, State.refresh])
+
+
+def reset_password_page() -> rx.Component:
+    """Standalone page linked from the password-reset email."""
+    return rx.theme(
+        rx.center(
+            rx.vstack(
+                rx.heading("Nova palavra-passe", size="5"),
+                rx.cond(
+                    State.reset_done,
+                    rx.vstack(
+                        rx.callout(State.reset_msg, icon="check", color_scheme="grass", width="100%"),
+                        rx.link("Ir para o início de sessão", href="/"),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.input(
+                            placeholder="Nova palavra-passe (mín. 8 caracteres)",
+                            type="password",
+                            value=State.reset_new_password,
+                            on_change=State.set_reset_new_password,
+                            size="3",
+                            width="100%",
+                        ),
+                        rx.cond(
+                            State.reset_msg != "",
+                            rx.callout(State.reset_msg, icon="alert-triangle", color_scheme="tomato", width="100%"),
+                        ),
+                        rx.button(
+                            "Definir palavra-passe",
+                            on_click=State.submit_reset,
+                            size="4",
+                            width="100%",
+                        ),
+                        spacing="4",
+                        width="100%",
+                    ),
+                ),
+                spacing="4",
+                width="100%",
+                max_width="380px",
+                padding="2rem",
+            ),
+            min_height="100vh",
+        ),
+    )
+
+
+app.add_page(
+    reset_password_page,
+    route="/reset-password",
+    title="Repor palavra-passe",
+    on_load=[State.load_reset_token],
+)

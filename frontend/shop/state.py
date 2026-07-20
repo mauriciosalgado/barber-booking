@@ -187,6 +187,12 @@ class State(rx.State):
     form_password: str = ""
     auth_error: str = ""
 
+    # --- password reset (from email link) --------------------------------
+    reset_token: str = ""
+    reset_new_password: str = ""
+    reset_msg: str = ""
+    reset_done: bool = False
+
     # --- password change (logged-in) ------------------------------------
     pw_current: str = ""
     pw_new: str = ""
@@ -736,6 +742,36 @@ class State(rx.State):
         async with httpx.AsyncClient(base_url=API_URL, timeout=5) as client:
             await client.post("/auth/forgot-password", json={"email": self.form_email})
         self.auth_error = "Se o email existir, receberá instruções para repor a palavra-passe."
+
+    @rx.event
+    def load_reset_token(self):
+        """Read the token from the URL query string on page load."""
+        self.reset_token = self.router.page.params.get("token", "")
+        self.reset_msg = ""
+        self.reset_done = False
+        self.reset_new_password = ""
+
+    @rx.event
+    def set_reset_new_password(self, value: str):
+        self.reset_new_password = value
+
+    @rx.event
+    async def submit_reset(self):
+        """Send the new password + token to the backend."""
+        self.reset_msg = ""
+        if len(self.reset_new_password) < 8:
+            self.reset_msg = "A palavra-passe deve ter pelo menos 8 caracteres."
+            return
+        async with httpx.AsyncClient(base_url=API_URL, timeout=5) as client:
+            resp = await client.post(
+                "/auth/reset-password",
+                json={"token": self.reset_token, "new_password": self.reset_new_password},
+            )
+        if resp.status_code == 200:
+            self.reset_msg = "Palavra-passe alterada com sucesso. Pode iniciar sessão."
+            self.reset_done = True
+        else:
+            self.reset_msg = "Link inválido ou expirado. Peça um novo."
 
     @rx.event
     async def change_password(self):
