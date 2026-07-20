@@ -15,7 +15,7 @@ services:
       - "8000:8000"
     environment:
       # --- Shop identity — change these for YOUR shop ------------------------
-      SHOP_NAME: "Ribeiro Barbeiro"
+      SHOP_NAME: "The Barber Shop"
       SHOP_TIMEZONE: "Europe/Lisbon"
       OWNER_NAME: "Owner"
       OWNER_EMAIL: "owner@theshop.com"
