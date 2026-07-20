@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 import jwt
+from pydantic import field_validator
 from sqlmodel import SQLModel, select
 
 from app.config import get_settings
@@ -41,6 +42,25 @@ class ForgotPasswordRequest(SQLModel):
 class ResetPasswordRequest(SQLModel):
     token: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def check_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return value
+
+
+class ChangePasswordRequest(SQLModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def check_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return value
 
 
 def _send_verification_email(user: User) -> None:
@@ -157,6 +177,19 @@ def reset_password(
 @router.get("/me", response_model=UserRead)
 def me(user: CurrentUser) -> User:
     return user
+
+
+@router.put("/me/password")
+def change_password(
+    data: ChangePasswordRequest, session: SessionDep, user: CurrentUser
+) -> dict[str, str]:
+    """Let a signed-in user change their password (must know the current one)."""
+    if not authenticate_user(session, user.email, data.current_password):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Current password is incorrect")
+    user.hashed_password = hash_password(data.new_password)
+    session.add(user)
+    session.commit()
+    return {"status": "password_updated"}
 
 
 @router.patch("/me", response_model=UserRead)

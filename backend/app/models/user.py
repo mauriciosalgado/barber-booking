@@ -27,6 +27,21 @@ class UserCreate(SQLModel):
     def normalize_email(cls, value: str) -> str:
         return value.strip().lower()
 
+    @field_validator("full_name")
+    @classmethod
+    def require_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("Name cannot be empty")
+        return name
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return value
+
 
 class UserUpdate(SQLModel):
     """The fields a signed-in user may change about their own account."""
