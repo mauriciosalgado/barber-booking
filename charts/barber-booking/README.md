@@ -77,8 +77,9 @@ One `Application` per shop; each just needs its own values file and its own
    builds+pushes both images to this repo's own GHCR namespace,
    `ghcr.io/<owner>/<repo>-backend:v1.0.0` and `...-frontend:v1.0.0` (image
    names derive from the repo, nothing to edit). GHCR packages are private
-   by default — see "Private registry access" below for how the cluster
-   authenticates to pull them.
+   by default **even if the repo is public** — either make them public
+   (simplest, no cluster-side auth needed) or set up `imagePullSecrets`; see
+   "Private registry access" below for both.
 2. **DNS**: point two hostnames at your Ingress controller's load balancer —
    one for the website, one for the API (e.g. `shop.example.com` and
    `api.shop.example.com`). They must be different hosts (see `values.yaml`
@@ -139,7 +140,20 @@ you have a specific reason to (see below).
 
 If `image.*.repository` points at a private image (e.g. a GHCR package set
 to private), the cluster needs an `imagePullSecret` or pulls will fail with
-`ImagePullBackOff`. Two ways to configure — pick **one**, not both:
+`ImagePullBackOff`. Note that a **public GitHub repo does not make its GHCR
+packages public** — packages are private by default regardless, and there's
+no way to change that from the workflow itself.
+
+**Option 0 — make the package public (simplest, no cluster auth at all):**
+after the first push, GHCR public packages allow anonymous pulls. Do this
+once per package (`<repo>-backend` and `<repo>-frontend`):
+`https://github.com/users/<you>/packages/container/package/<repo>-backend`
+→ **Package settings** → **Danger Zone** → **Change visibility** → **Public**
+(type the package name to confirm). With both public, skip everything below
+— no `imagePullSecrets`, no `imageCredentials`.
+
+If you'd rather keep the images private, two ways to configure — pick
+**one**, not both:
 
 1. **GitOps-friendly (preferred)** — create the pull secret yourself
    out-of-band, so the PAT never lands in a values file:
