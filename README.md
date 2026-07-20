@@ -143,6 +143,15 @@ Both images are stateless, configured by env vars, and expose `/health` +
 `/health/ready` for orchestrator probes. Supply secrets through your platform's
 secret store.
 
+### Kubernetes
+
+A Helm chart lives in `charts/barber-booking/` — one install per shop, with
+an optional built-in Postgres. See `charts/barber-booking/README.md` for
+both the production path (real registry + Ingress + TLS) and a one-command
+local path with no registry at all: `./scripts/deploy-local.sh` builds the
+images and loads them straight into a local cluster (kind/minikube/k3d/Docker
+Desktop).
+
 ## Known limitations
 
 These are deliberate tradeoffs for a small, single-shop deployment — not bugs.
@@ -164,15 +173,14 @@ Revisit them only if your situation changes.
   multiplexes both on one port). Dev mode is verified stable with zero
   errors across every flow, just heavier/unoptimized. Don't switch without
   first resolving that bug or splitting frontend/backend behind a proxy
-  that routes WebSocket traffic separately (e.g. Traefik).
+  that routes WebSocket traffic separately (e.g. Traefik). The Helm chart
+  works around this by giving Reflex's event backend its own Ingress path
+  rules rather than relying on Reflex's single-port mode.
 - **SQLite by default.** Fine for one shop's traffic; a single file, no
-  separate DB server to run. Swap to Postgres (see above) if you need
-  concurrent writers or managed backups.
+  separate DB server to run. Swap to Postgres (see above, or the Helm
+  chart's built-in Postgres option) if you need concurrent writers or
+  managed backups.
 - **No schema migrations.** `create_all()` only adds new tables, never new
   columns to existing ones. A schema change on a live database needs a
   manual migration or a DB reset. Adopt Alembic if the schema will keep
   evolving after go-live.
-- **No Kubernetes manifests yet.** Only `docker-compose.yml` exists today.
-  The images are already k8s-ready (stateless, env-configured, proper
-  liveness/readiness probes) — Deployment/Service/Ingress/PVC/Secret YAML
-  would need to be written when you're ready to move off Compose.

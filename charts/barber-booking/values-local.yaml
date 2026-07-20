@@ -1,0 +1,36 @@
+# Values for local, no-registry deployment via scripts/deploy-local.sh.
+# Not meant for a real shop — dev-only secrets, no TLS, images built and
+# loaded straight from your machine's Docker daemon into the cluster.
+
+jwtSecret: "dev-only-secret-change-me"
+
+shop:
+  name: "Local Dev Shop"
+  owner:
+    email: "owner@example.com"
+    password: "change-me"
+
+# Never try to pull — the images only exist locally (built + loaded by
+# scripts/deploy-local.sh), there is no registry to pull them from.
+image:
+  backend:
+    pullPolicy: Never
+  frontend:
+    pullPolicy: Never
+
+# Most local clusters (kind/minikube/k3d) don't have an Ingress controller
+# and a real TLS cert set up out of the box. Disable Ingress and reach the
+# app with `kubectl port-forward` instead (see NOTES.txt after installing).
+ingress:
+  enabled: false
+
+# Reflex's event backend (port 8001) isn't behind any path-splitting proxy
+# locally, so it needs its own plain-http URL — unlike the production
+# default, which shares the Ingress host with the web page via path rules.
+urls:
+  publicApiUrl: "http://localhost:8000"
+  adminUrl: "http://localhost:8000/admin"
+  reflexApiUrl: "http://localhost:8001"
+  frontendUrl: "http://localhost:3000"
+
+corsOrigins: "http://localhost:3000"
