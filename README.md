@@ -74,6 +74,82 @@ colours, logo, and headline from the UI.
 In production, point at a real provider (Brevo, Mailgun, SES, etc.) with
 `SMTP_STARTTLS=true` and credentials set.
 
+**Important**: the backend only speaks **STARTTLS**, not implicit TLS
+(`smtplib.SMTP(...).starttls()` in `app/email.py`, no `SMTP_SSL`). Use
+port **587** with `SMTP_STARTTLS=true`. Don't use port 465 — it expects TLS
+from the first byte and will hang/fail with this code.
+
+**Test it for real after deploy** — a broken SMTP config never fails the
+request (`send_email()` no-ops if `SMTP_HOST` is empty, and any real send
+error is caught and logged, not surfaced to the user). Register a throwaway
+account and confirm the verification email actually lands in an inbox — a
+`200 OK` response doesn't prove anything was sent.
+
+#### Option A — Gmail app password (quickest, no domain needed)
+
+1. Turn on 2-Step Verification: <https://myaccount.google.com/security>
+2. Generate an app password: <https://myaccount.google.com/apppasswords> →
+   name it (e.g. `barber-booking`) → copy the 16-character code shown.
+3. Configure:
+
+   | Variable | Value |
+   | -------- | ----- |
+   | `SMTP_HOST` | `smtp.gmail.com` |
+   | `SMTP_PORT` | `587` |
+   | `SMTP_STARTTLS` | `true` |
+   | `SMTP_FROM` | your Gmail address |
+   | `SMTP_USERNAME` | your Gmail address |
+   | `SMTP_PASSWORD` | the 16-character app password (not your Google login password) |
+
+   Caveats: mail comes from a `@gmail.com` address (not shop-branded), and
+   Gmail's free tier caps at ~500 emails/day (plenty for one shop).
+
+   **If "App Passwords" isn't available on that page**, it's one of:
+   - 2-Step Verification isn't actually on yet (recheck step 1 — it can
+     take a minute to propagate).
+   - It's a Google Workspace (work/school) account and the admin disabled
+     app passwords org-wide — use a personal `@gmail.com` account instead,
+     or ask the admin.
+   - Advanced Protection Program is enabled on the account — it disables
+     app passwords outright as a security measure.
+
+#### Option B — Gmail sending as your own domain (if you own one)
+
+Gives you a `noreply@yourshop.com` sender using the same Gmail app password
+above, no real mail server of your own needed:
+
+1. **Cloudflare (or any DNS host with email forwarding)**: create a routing
+   rule forwarding `noreply@yourshop.com` → your Gmail address. Note this is
+   **inbound-only** — it lets you receive/verify at that address, it is
+   *not* an outbound SMTP relay and can't be used as `SMTP_HOST` directly.
+2. **Gmail → Settings → Accounts and Import → Send mail as → Add another
+   email address** → enter `noreply@yourshop.com`.
+3. Gmail will ask for an SMTP relay to verify sending through — point it at
+   **Gmail's own server**, authenticating as yourself:
+   - SMTP Server: `smtp.gmail.com`, Port: `587` (TLS)
+   - Username: your Gmail address, Password: the app password from Option A
+4. Gmail emails a confirmation link to `noreply@yourshop.com`, which arrives
+   in your Gmail inbox via the Cloudflare forward — click it to finish.
+5. Configure the shop with the same `SMTP_USERNAME`/`SMTP_PASSWORD` as
+   Option A, but:
+
+   ```
+   SMTP_FROM="Your Shop Name <noreply@yourshop.com>"
+   ```
+
+   Since `yourshop.com` has no SPF/DKIM record authorizing Google to send on
+   its behalf, most inboxes will show "via gmail.com" next to the sender —
+   cosmetic, mail still delivers.
+
+#### Option C — a real transactional provider (most "proper")
+
+Verify `yourshop.com` with a provider like Brevo (free tier, 300/day), SES,
+Mailgun, or SendGrid — each walks you through adding **SPF and DKIM DNS
+records** (a couple of TXT/CNAME entries at your DNS host, e.g. Cloudflare).
+Once verified, use the provider's own SMTP host/port and an API-key-style
+username/password — no Gmail or app password involved, and no "via
+gmail.com" caveat since the domain is now properly authenticated.
+
 ### Infrastructure (required for production)
 
 **Backend:**
