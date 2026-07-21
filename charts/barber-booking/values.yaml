@@ -103,10 +103,9 @@ ingress:
     secretName: "" # defaults to "<release-name>-tls-secret" if empty
 
 # CORS allow-list for the API. Defaults to "https://<ingress.host>" if empty
-# AND ingress.enabled=true. With ingress.enabled=false, there's no Ingress
-# host to derive anything from — you MUST set this explicitly (the chart
-# fails the install otherwise, rather than silently allow-listing a domain
-# nobody can reach). See values-local.yaml for a worked no-Ingress example.
+# AND ingress.enabled=true, otherwise to "http://localhost:3000" — see the
+# urls: block below for why "localhost" is a real, working default (not
+# just a dev stand-in) even without Ingress.
 corsOrigins: ""
 
 # Advanced: override the public URLs directly instead of deriving them from
@@ -114,28 +113,33 @@ corsOrigins: ""
 # these empty for a normal Ingress-fronted deployment.
 #
 # With ingress.enabled=false (LoadBalancer/NodePort/port-forward/VPN — no
-# Ingress in front), reflexApiUrl and frontendUrl are REQUIRED — the chart
-# has no way to guess the address the browser actually uses (a
-# LoadBalancer's IP is assigned by MetalLB at runtime, not known at template
-# time), and guessing wrong (e.g. falling back to a stale ingress.host)
-# silently breaks the browser's websocket connection instead of failing
-# loudly. See values-local.yaml for a worked example.
+# Ingress in front), reflexApiUrl/frontendUrl default to
+# "http://localhost:3000", same as values-local.yaml. This isn't a dev-only
+# placeholder: Reflex's own frontend JS treats "localhost" as a sentinel and
+# swaps it for whatever host the browser actually used to load the page
+# before opening the state-sync websocket — so booking, login, and admin
+# keep working no matter which of port-forward/NodePort/LoadBalancer-IP you
+# used, with nothing to configure per-environment, and without needing any
+# of this to be a public, internet-reachable address.
 #
-# None of this needs to be a public, internet-reachable domain — the
-# browser just needs a network path to whatever address you put here. A
-# private LAN IP (MetalLB), a VPN/Tailscale hostname, or plain
-# localhost:3000 via port-forward all work equally well; nothing here ever
-# has to leave your own network.
+# The one thing that swap doesn't cover is anything baked into plain static
+# HTML instead of routed through that JS helper: the shop's logo/favicon,
+# and any password-reset/verification emails (opened outside any browser
+# session tied to this cluster) built from frontendUrl. Both simply fail
+# silently (broken image, dead email link) until you're ready to serve real
+# customers — at that point set reflexApiUrl/frontendUrl explicitly to a
+# real reachable address (LAN IP, VPN/Tailscale hostname, or public domain).
 urls:
   adminUrl: "" # link to the SQLAdmin console. Empty (default) hides it in the UI, UNLESS
                # ingress.enabled=true AND ingress.apiHost is set, in which case it
                # defaults to "https://<apiHost>/admin"
   reflexApiUrl: "" # browser -> Reflex's own event backend (websocket state + logo proxy).
-                   # default: https://<ingress.host> (only if ingress.enabled=true).
-                   # REQUIRED if ingress.enabled=false.
+                   # default: https://<ingress.host> if ingress.enabled=true,
+                   # else http://localhost:3000 (see comment above).
   frontendUrl: "" # backend's password-reset/verification email links.
-                  # default: https://<ingress.host> (only if ingress.enabled=true).
-                  # REQUIRED if ingress.enabled=false.
+                  # default: https://<ingress.host> if ingress.enabled=true,
+                  # else http://localhost:3000 — override this once real
+                  # customers need working email links (see comment above).
 
 # --- Email (required for real accounts to verify/reset passwords) ------
 email:
