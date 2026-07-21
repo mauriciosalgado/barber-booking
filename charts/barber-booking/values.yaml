@@ -141,6 +141,30 @@ urls:
                   # else http://localhost:3000 — override this once real
                   # customers need working email links (see comment above).
 
+# --- Network isolation ---------------------------------------------------
+# Optional NetworkPolicy that walls off this release's namespace from every
+# OTHER namespace in the cluster, while keeping the things the app actually
+# needs working: pods within this release talking to each other, the
+# Ingress controller reaching the frontend, DNS lookups, and any outbound
+# internet traffic (SMTP for password-reset/verification emails, etc.).
+# Requires a CNI that enforces NetworkPolicy (e.g. Calico, Cilium) — on one
+# that doesn't, this resource is silently ignored, not enforced.
+networkPolicy:
+  enabled: false
+  # Namespace the Ingress controller (Traefik, ingress-nginx, ...) runs in.
+  # Required when enabled — without it, external visitors can no longer
+  # reach the frontend once ingress from every other namespace is blocked.
+  ingressControllerNamespace: ""
+  # This cluster's Pod and Service CIDRs. Required when enabled, so the
+  # "allow egress to the internet" rule can explicitly carve these two
+  # ranges back out — without that, "the internet" (0.0.0.0/0) would also
+  # cover every other namespace's pods/Services, defeating the point of
+  # this policy. Find yours from your CNI's config (e.g. Calico's IPPool)
+  # and your cluster's --service-cluster-ip-range (often the kubeadm
+  # default 10.96.0.0/12).
+  podCIDR: ""
+  serviceCIDR: ""
+
 # --- Email (required for real accounts to verify/reset passwords) ------
 email:
   smtpHost: ""

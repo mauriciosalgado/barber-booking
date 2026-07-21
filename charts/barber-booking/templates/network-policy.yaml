@@ -1,0 +1,55 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "barber-booking.fullname" . }}-isolate
+  labels:
+    {{- include "barber-booking.labels" . | nindent 4 }}
+spec:
+  # Applies to every pod in this release's namespace — NetworkPolicy is
+  # always scoped to the namespace it's created in, so this can't affect
+  # any other namespace's traffic.
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Traffic between pods in THIS namespace (frontend <-> backend, backend
+    # <-> the built-in Postgres) — without this the release can't talk to
+    # itself.
+    - from:
+        - podSelector: {}
+    # The Ingress controller's namespace — the only way external visitors
+    # reach this app. Without this rule the site becomes unreachable from
+    # outside the cluster the moment this policy applies.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ required "networkPolicy.ingressControllerNamespace is required when networkPolicy.enabled=true" .Values.networkPolicy.ingressControllerNamespace }}
+  egress:
+    - to:
+        - podSelector: {}
+    # DNS: every hostname/Service lookup this app makes (including its own
+    # pod-to-pod calls) goes through CoreDNS in kube-system. Block this and
+    # nothing in the namespace can resolve anything, including itself.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The public internet — SMTP (password-reset/verification emails) and
+    # anything else the app calls out to. Excludes this cluster's own
+    # Pod/Service CIDRs: the goal is isolating this namespace from its
+    # neighbors, not from the outside world, and without these exceptions
+    # "0.0.0.0/0" would also reach every other namespace's pods/Services.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - {{ required "networkPolicy.podCIDR is required when networkPolicy.enabled=true" .Values.networkPolicy.podCIDR }}
+              - {{ required "networkPolicy.serviceCIDR is required when networkPolicy.enabled=true" .Values.networkPolicy.serviceCIDR }}
+{{- end }}

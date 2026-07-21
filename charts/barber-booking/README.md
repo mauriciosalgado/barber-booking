@@ -257,6 +257,38 @@ what's what is obvious at a glance (e.g. release `ribeiro` -> service
 ArgoCD, that's `spec.destination.namespace` on the `Application`. Set
 `nameOverride` to use a different resource-name prefix.
 
+## Network isolation (optional)
+
+`networkPolicy.enabled: true` adds a single `NetworkPolicy` that walls off
+this release's namespace from every *other* namespace in the cluster, while
+keeping the traffic the app actually needs:
+
+- pods within this release talking to each other (frontend <-> backend <->
+  the built-in Postgres, if enabled),
+- the Ingress controller's namespace reaching in (so the site stays
+  reachable from outside the cluster),
+- DNS lookups to `kube-system` (CoreDNS),
+- outbound internet traffic (SMTP for password-reset/verification emails,
+  and anything else the app calls out to).
+
+Requires a CNI that enforces `NetworkPolicy` (e.g. Calico, Cilium) — on one
+that doesn't, this resource is created but silently has no effect. Three
+values are required when enabled, since getting any of them wrong either
+does nothing or breaks the app:
+
+```yaml
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: traefik # whatever namespace your Ingress controller runs in
+  podCIDR: 10.0.0.0/16 # your CNI's pod CIDR
+  serviceCIDR: 10.96.0.0/12 # your cluster's --service-cluster-ip-range (kubeadm default shown)
+```
+
+`podCIDR`/`serviceCIDR` exist only to carve those two ranges back out of the
+"allow egress to the internet" rule — without them, "the internet"
+(`0.0.0.0/0`) would also cover every other namespace's pods/Services,
+defeating the point of the policy.
+
 ## Private registry access
 
 If `image.*.repository` points at a private image (e.g. a GHCR package set
