@@ -154,15 +154,16 @@ you have a specific reason to (see below).
 
 ## Naming & namespace
 
-Every resource is named `<release-name>-barber-booking` and created in
-whatever namespace the release targets — with ArgoCD, that's just
+Every resource is named `<release-name>-<nameOverride>` (`nameOverride`
+defaults to `barber-booking` in `values.yaml`) and created in whatever
+namespace the release targets — with ArgoCD, that's just
 `spec.destination.namespace` on the shop's `Application` (see the GitOps
 section above); one release name and one namespace per shop is the whole
-convention. Nothing in `values.yaml` needs to change for this.
+convention. Nothing needs to change here for that.
 
-`fullnameOverride` exists for the one less-common case: wanting a shorter or
-custom resource-name prefix instead of `<release-name>-barber-booking` — e.g.
-set it to `ribeiro` to get plain `ribeiro-backend`, `ribeiro-frontend`, etc.
+`fullnameOverride` replaces the whole prefix instead of just the
+`nameOverride` part — e.g. set it to `ribeiro` to get plain `ribeiro-backend`,
+`ribeiro-frontend`, etc.
 
 ## Private registry access
 

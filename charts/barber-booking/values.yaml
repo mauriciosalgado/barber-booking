@@ -3,13 +3,13 @@
 # (ArgoCD)" section for how a shop's Application is set up.
 
 # --- Naming ------------------------------------------------------------
-# Every resource is named "<release-name>-barber-booking" by default, and
+# Every resource is named "<release-name>-<nameOverride>" by default, and
 # lands in whatever namespace the Application's spec.destination.namespace
 # says (that's the standard way to pick a shop's namespace with ArgoCD — see
 # the GitOps section in the README — nothing to set here for that).
-# fullnameOverride only matters if you want a different resource-name prefix,
-# e.g. set it to "ribeiro" to get plain "ribeiro-backend", "ribeiro-frontend".
-fullnameOverride: ""
+nameOverride: "barber-booking" # the "<name>" part of "<release-name>-<name>"
+fullnameOverride: "" # set to replace the whole prefix instead, e.g. "ribeiro"
+                      # for plain "ribeiro-backend", "ribeiro-frontend", etc.
 
 # --- Shop identity ---------------------------------------------------------
 shop:
