@@ -100,7 +100,7 @@ ingress:
   # cert-manager.io/cluster-issuer: letsencrypt-prod
   tls:
     enabled: true
-    secretName: "" # defaults to "<release-name>-tls" if empty
+    secretName: "" # defaults to "<release-name>-tls-secret" if empty
 
 # CORS allow-list for the API. Defaults to "https://<ingress.host>" if empty —
 # only change this if the frontend is reachable under a different origin.
