@@ -154,23 +154,15 @@ you have a specific reason to (see below).
 
 ## Naming & namespace
 
-The normal way to isolate a shop is `helm install <release-name> ... -n <namespace>
---create-namespace`: every resource is named `<release-name>-barber-booking`,
-and lands in whatever namespace you pass to `-n`/`--namespace` — one shop per
-release name, one namespace per shop is a common/simple layout. Nothing in
-`values.yaml` needs to change for this.
+Every resource is named `<release-name>-barber-booking` and created in
+whatever namespace the release targets — with ArgoCD, that's just
+`spec.destination.namespace` on the shop's `Application` (see the GitOps
+section above); one release name and one namespace per shop is the whole
+convention. Nothing in `values.yaml` needs to change for this.
 
-Three overrides exist for less common cases (e.g. GitOps tooling that renders
-manifests without setting a release namespace, or wanting shorter/custom
-resource names):
-
-- `nameOverride` — replace the `barber-booking` part of resource names.
-- `fullnameOverride` — replace the whole `<release-name>-barber-booking`
-  prefix, e.g. set it to `ribeiro` to get plain `ribeiro-backend`,
-  `ribeiro-frontend`, etc.
-- `namespaceOverride` — force resources into a specific namespace regardless
-  of the release's own namespace. Leave empty and use `-n`/`--namespace`
-  instead unless you have a specific reason not to.
+`fullnameOverride` exists for the one less-common case: wanting a shorter or
+custom resource-name prefix instead of `<release-name>-barber-booking` — e.g.
+set it to `ribeiro` to get plain `ribeiro-backend`, `ribeiro-frontend`, etc.
 
 ## Private registry access
 
