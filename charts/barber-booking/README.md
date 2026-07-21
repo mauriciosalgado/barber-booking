@@ -437,13 +437,39 @@ but you — both fail harmlessly until you're ready for real customers, at
 which point set `urls.reflexApiUrl`/`frontendUrl` to a real reachable
 address (LAN IP, VPN/Tailscale hostname, or public domain via Ingress).
 
-## Why backend/frontend replicas stay at 1
+## Backend and frontend replicas
 
-- **Backend**: SQLite is a single file (one writer at a time), and the login
-  rate limiter counts in memory per pod. Scaling needs Postgres *and* a
-  shared rate-limit store (e.g. Redis) — neither is wired up here.
-- **Frontend**: Reflex keeps UI state in memory per worker. Scaling needs
-  Reflex's Redis-backed state manager — not wired up here either.
+- **Backend**: replicas can go above 1, but only with `database.type:
+  postgres`. With `database.type: sqlite` (the default), the chart refuses to
+  render if `backend.replicas` is set above 1 — SQLite is a single file with
+  one writer at a time, so a second pod risks "database is locked" errors or
+  corruption. Switching to Postgres lifts that limit.
 
-Both are fine for a single shop's traffic. See the root `README.md`'s
-"Known limitations" section for the full reasoning.
+  The rollout strategy follows the same rule automatically: `Recreate` for
+  SQLite (the old pod is fully gone before the new one starts, so two pods
+  never touch the file at once, even briefly during a deploy) or
+  `RollingUpdate` for Postgres (normal zero-downtime rollout). Override with
+  `backend.updateStrategy` if you ever need something else.
+
+  One thing Postgres does *not* fix on its own: the login/registration rate
+  limiter (`slowapi`) counts hits in memory, per pod — it has no way to see
+  requests handled by other replicas without a shared store like Redis,
+  which this chart deliberately doesn't add for something this small. The
+  effective cluster-wide limit is therefore roughly multiplied by replica
+  count. The limits in `app/routers/auth.py` (5-10/minute) are deliberately
+  low enough that this stays impractical to brute-force even doubled or
+  tripled — fine for the handful of replicas (2-3) this chart is meant for;
+  a shared store like Redis would be needed well beyond that. This is a
+  manual, deploy-time replica count — **not** a Kubernetes autoscaler (no
+  `HorizontalPodAutoscaler` is set up), so it only changes when you
+  deliberately set `backend.replicas` and redeploy.
+
+- **Frontend**: keep replicas at 1. Reflex keeps UI/session state in memory
+  per worker; scaling past 1 needs either sticky (session-affinity) routing
+  at the Ingress plus accepting that a pod restart drops in-flight sessions
+  (never booking data, which is always persisted server-side), or Reflex's
+  Redis-backed state manager for true statelessness — neither is wired up
+  here today.
+
+Both defaults (1/1) are fine for a single shop's traffic. See the root
+`README.md`'s "Known limitations" section for the full reasoning.

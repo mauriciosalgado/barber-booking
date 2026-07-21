@@ -5,9 +5,10 @@ metadata:
   labels:
     {{- include "barber-booking.labels" . | nindent 4 }}
 spec:
+  {{- include "barber-booking.validateReplicas" . }}
   replicas: {{ .Values.backend.replicas }}
   strategy:
-    type: Recreate
+    type: {{ include "barber-booking.backendUpdateStrategy" . }}
   selector:
     matchLabels:
       app: {{ include "barber-booking.fullname" . }}-backend

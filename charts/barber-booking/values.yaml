@@ -214,11 +214,25 @@ postgresql:
       memory: 512Mi
 
 # --- Backend (FastAPI) ---------------------------------------------------
-# Keep replicas at 1: SQLite is a single file (one writer at a time) and the
-# login rate limiter counts in memory per pod. Scaling past 1 needs Postgres
-# *and* a shared rate-limit store (e.g. Redis) — not wired up here.
+# database.type: sqlite  -> keep replicas at 1. SQLite is a single file with
+#   one writer at a time; a second pod risks "database is locked" errors or
+#   corruption. The chart refuses to render (fails fast) if you set replicas
+#   above 1 here without also switching to Postgres.
+# database.type: postgres -> replicas can go above 1. The login/registration
+#   rate limiter still counts hits in memory per pod (no Redis wired up), so
+#   the effective cluster-wide limit is roughly multiplied by replica count
+#   — the limits in app/routers/auth.py (5-10/minute) are deliberately low
+#   enough that this stays impractical to brute-force even at a few replicas.
+#   Fine for the handful of replicas (2-3) this chart is meant for; a shared
+#   store like Redis would be needed well beyond that.
 backend:
   replicas: 1
+  # Deployment rollout strategy. Leave empty to pick the safe default for
+  # database.type automatically: "Recreate" for sqlite (old pod fully gone
+  # before the new one starts, so two pods never touch the file at once,
+  # even briefly) or "RollingUpdate" for postgres (normal zero-downtime
+  # rollout). Only override if you specifically know you need something else.
+  updateStrategy: ""
   resources:
     requests:
       cpu: 100m

@@ -233,11 +233,15 @@ checklist, and secrets handling.
 These are deliberate tradeoffs for a small, single-shop deployment — not bugs.
 Revisit them only if your situation changes.
 
-- **One backend replica.** The rate limiter (`slowapi`) stores counts in
-  memory. With a single replica this is correct; with more than one, each
-  pod counts independently, so limits get proportionally more lenient
-  (never more strict, so this is not a security hole — just less precise).
-  A shared backend (e.g. Redis) would be needed to scale horizontally.
+- **Backend replicas need Postgres.** With SQLite (the default), the chart
+  refuses to run more than one backend replica — SQLite allows only one
+  writer at a time. Switch `database.type` to `postgres` to scale past 1.
+  The login/registration rate limiter (`slowapi`) still counts hits in
+  memory per pod (no shared store like Redis), so the effective
+  cluster-wide limit is roughly multiplied by replica count — the limits
+  (5-10/minute) are deliberately low enough that this stays impractical to
+  brute-force even doubled or tripled. This is a manual, deploy-time
+  replica count, not live autoscaling (no HPA is set up).
 - **JWTs aren't revocable.** Logout is client-side only, and changing or
   resetting a password does not invalidate previously-issued access tokens
   — they remain valid until they naturally expire (24h). This is a standard

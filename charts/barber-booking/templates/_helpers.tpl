@@ -16,6 +16,30 @@
 {{- define "barber-booking.ingressName" -}}{{ include "barber-booking.fullname" . }}-ingress{{- end -}}
 {{- define "barber-booking.registrySecretName" -}}{{ include "barber-booking.fullname" . }}-registry-secret{{- end -}}
 
+{{/* Guard against SQLite + multiple backend replicas: SQLite is a single
+file with one writer at a time, so a second pod writing to it risks
+"database is locked" errors or corruption. Postgres has no such limit. */}}
+{{- define "barber-booking.validateReplicas" -}}
+{{- if and (eq .Values.database.type "sqlite") (gt (.Values.backend.replicas | int) 1) -}}
+{{- fail "backend.replicas > 1 requires database.type: postgres — SQLite allows only one writer at a time." -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Rolling-update strategy for the backend Deployment. SQLite needs the old
+pod fully gone before the new one starts (Recreate) so two pods never hold
+the file at once, even briefly during a rollout. Postgres has no such
+restriction, so a normal zero-downtime RollingUpdate is used instead.
+Override via backend.updateStrategy if a shop ever needs something else. */}}
+{{- define "barber-booking.backendUpdateStrategy" -}}
+{{- if .Values.backend.updateStrategy -}}
+{{ .Values.backend.updateStrategy }}
+{{- else if eq .Values.database.type "sqlite" -}}
+Recreate
+{{- else -}}
+RollingUpdate
+{{- end -}}
+{{- end -}}
+
 {{/* Chart name + version, for the standard helm.sh/chart label. */}}
 {{- define "barber-booking.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
