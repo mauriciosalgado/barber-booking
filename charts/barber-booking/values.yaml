@@ -102,20 +102,40 @@ ingress:
     enabled: true
     secretName: "" # defaults to "<release-name>-tls-secret" if empty
 
-# CORS allow-list for the API. Defaults to "https://<ingress.host>" if empty —
-# only change this if the frontend is reachable under a different origin.
+# CORS allow-list for the API. Defaults to "https://<ingress.host>" if empty
+# AND ingress.enabled=true. With ingress.enabled=false, there's no Ingress
+# host to derive anything from — you MUST set this explicitly (the chart
+# fails the install otherwise, rather than silently allow-listing a domain
+# nobody can reach). See values-local.yaml for a worked no-Ingress example.
 corsOrigins: ""
 
 # Advanced: override the public URLs directly instead of deriving them from
 # ingress.host/apiHost (which assumes HTTPS behind a real Ingress). Leave
-# these empty for a normal deployment. Used by values-local.yaml, where the
-# app is reached with plain-http `kubectl port-forward` and there's no
-# Ingress splitting paths at all.
+# these empty for a normal Ingress-fronted deployment.
+#
+# With ingress.enabled=false (LoadBalancer/NodePort/port-forward/VPN — no
+# Ingress in front), reflexApiUrl and frontendUrl are REQUIRED — the chart
+# has no way to guess the address the browser actually uses (a
+# LoadBalancer's IP is assigned by MetalLB at runtime, not known at template
+# time), and guessing wrong (e.g. falling back to a stale ingress.host)
+# silently breaks the browser's websocket connection instead of failing
+# loudly. See values-local.yaml for a worked example.
+#
+# None of this needs to be a public, internet-reachable domain — the
+# browser just needs a network path to whatever address you put here. A
+# private LAN IP (MetalLB), a VPN/Tailscale hostname, or plain
+# localhost:3000 via port-forward all work equally well; nothing here ever
+# has to leave your own network.
 urls:
   adminUrl: "" # link to the SQLAdmin console. Empty (default) hides it in the UI, UNLESS
-               # ingress.apiHost is set, in which case it defaults to "https://<apiHost>/admin"
-  reflexApiUrl: "" # browser -> Reflex's own event backend (websocket state + logo proxy). default: https://<host>
-  frontendUrl: "" # backend's password-reset/verification email links. default: https://<host>
+               # ingress.enabled=true AND ingress.apiHost is set, in which case it
+               # defaults to "https://<apiHost>/admin"
+  reflexApiUrl: "" # browser -> Reflex's own event backend (websocket state + logo proxy).
+                   # default: https://<ingress.host> (only if ingress.enabled=true).
+                   # REQUIRED if ingress.enabled=false.
+  frontendUrl: "" # backend's password-reset/verification email links.
+                  # default: https://<ingress.host> (only if ingress.enabled=true).
+                  # REQUIRED if ingress.enabled=false.
 
 # --- Email (required for real accounts to verify/reset passwords) ------
 email:
