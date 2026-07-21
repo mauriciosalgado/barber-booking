@@ -1,0 +1,59 @@
+name: Package and publish Helm chart
+
+# Publishes charts/barber-booking as an OCI Helm chart artifact to this
+# repo's own GitHub Container Registry (GHCR) namespace:
+#   oci://ghcr.io/<owner>/charts/barber-booking:<version>
+#
+# This is the one canonical copy of the chart. Every shop's ArgoCD
+# Application pins its Helm source to a specific published version here
+# instead of tracking a git branch — so a chart template change can never
+# silently apply itself to an already-deployed shop out from under a
+# pinned image tag (see the incident that motivated this: a `main`-tracked
+# chart change landed a new pod securityContext against an older image
+# that didn't have the matching non-root user yet).
+#
+# Runs whenever a chart-version tag is pushed:
+#   git tag chart-v0.3.1 && git push origin chart-v0.3.1
+# The tag's version must match charts/barber-booking/Chart.yaml's `version`
+# field exactly — this is checked before anything is pushed, so a tag can
+# never publish templates under the wrong version number.
+
+on:
+  push:
+    tags: ["chart-v*.*.*"]
+
+permissions:
+  contents: read # to check out the code
+  packages: write # to push the chart to GHCR
+
+jobs:
+  package-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Verify the tag matches Chart.yaml's version
+        run: |
+          tag_version="${GITHUB_REF_NAME#chart-v}"
+          chart_version=$(grep '^version:' charts/barber-booking/Chart.yaml | awk '{print $2}')
+          if [ "$tag_version" != "$chart_version" ]; then
+            echo "::error::Tag chart-v$tag_version does not match Chart.yaml version $chart_version — bump Chart.yaml first."
+            exit 1
+          fi
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Package the chart
+        run: helm package charts/barber-booking
+
+      - name: Push the chart to GHCR
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm push barber-booking-*.tgz "oci://ghcr.io/$owner/charts"
