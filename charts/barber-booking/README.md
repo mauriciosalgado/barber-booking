@@ -464,12 +464,14 @@ address (LAN IP, VPN/Tailscale hostname, or public domain via Ingress).
   `HorizontalPodAutoscaler` is set up), so it only changes when you
   deliberately set `backend.replicas` and redeploy.
 
-- **Frontend**: keep replicas at 1. Reflex keeps UI/session state in memory
-  per worker; scaling past 1 needs either sticky (session-affinity) routing
-  at the Ingress plus accepting that a pod restart drops in-flight sessions
-  (never booking data, which is always persisted server-side), or Reflex's
-  Redis-backed state manager for true statelessness — neither is wired up
-  here today.
+- **Frontend**: replicas can go above 1 regardless of `database.type`. Reflex
+  keeps UI state in memory per worker, but every reconnect (page load, or a
+  fresh connection after a pod restarts) re-derives it from the browser-held
+  JWT (`LocalStorage`) plus the backend API — so a pod restart mid-session
+  just causes a brief reload, losing only unsaved in-progress form input,
+  never login/bookings/schedule data. No session affinity/stickiness is
+  required for correctness.
 
-Both defaults (1/1) are fine for a single shop's traffic. See the root
-`README.md`'s "Known limitations" section for the full reasoning.
+Both default to 1 replica, but can scale independently once their
+respective conditions are met. See the root `README.md`'s "Known
+limitations" section for the full reasoning.

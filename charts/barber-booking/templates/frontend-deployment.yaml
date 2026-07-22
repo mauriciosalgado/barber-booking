@@ -5,8 +5,14 @@ metadata:
   labels:
     {{- include "barber-booking.labels" . | nindent 4 }}
 spec:
-  # See values.yaml: keep this at 1 — Reflex keeps UI state in memory per
-  # worker, and this chart doesn't wire up its Redis-backed state manager.
+  # Replicas can go above 1 — Reflex keeps UI state in memory per worker, but
+  # every reconnect (page load, or a fresh connection after a pod restarts)
+  # re-derives it from the browser-held JWT (LocalStorage) plus the backend
+  # API. A pod restart mid-session causes a brief reload and loses only
+  # unsaved in-progress form input — never login, bookings, or schedule
+  # data. No session affinity/stickiness is required for correctness; see
+  # values.yaml for the (optional, not implemented) tradeoffs if reload
+  # frequency ever becomes a real problem.
   replicas: {{ .Values.frontend.replicas }}
   selector:
     matchLabels:

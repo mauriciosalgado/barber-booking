@@ -247,8 +247,11 @@ backend:
     type: ClusterIP
 
 # --- Frontend (Reflex) ---------------------------------------------------
-# Keep replicas at 1: Reflex keeps UI state in memory per worker; running
-# more than one needs Reflex's Redis-backed state manager — not wired up here.
+# Replicas can go above 1 regardless of database.type. Reflex keeps UI state
+# in memory per worker, but every reconnect re-derives it from the
+# browser-held JWT (LocalStorage) plus the backend API — so a pod restart
+# mid-session just causes a brief reload, never real data loss. No session
+# affinity/stickiness is required for correctness.
 frontend:
   replicas: 1
   resources:

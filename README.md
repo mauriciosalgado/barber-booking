@@ -242,6 +242,11 @@ Revisit them only if your situation changes.
   (5-10/minute) are deliberately low enough that this stays impractical to
   brute-force even doubled or tripled. This is a manual, deploy-time
   replica count, not live autoscaling (no HPA is set up).
+- **Frontend replicas scale independently of the database.** Reflex keeps UI
+  state in memory per worker, but every reconnect re-derives it from the
+  browser-held JWT plus the backend API, so a pod restart mid-session just
+  causes a brief reload — never real data loss. No session affinity is
+  required to run more than one frontend replica.
 - **JWTs aren't revocable.** Logout is client-side only, and changing or
   resetting a password does not invalidate previously-issued access tokens
   — they remain valid until they naturally expire (24h). This is a standard
