@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import text
 
+from app.availability import shop_now
 from app.config import get_settings
 from app.database import SessionDep
 
@@ -12,7 +13,13 @@ router = APIRouter(tags=["system"])
 @router.get("/health")
 def health() -> dict[str, str]:
     """Liveness: the process is up and serving."""
-    return {"status": "ok", "shop": get_settings().shop_name}
+    settings = get_settings()
+    return {
+        "status": "ok",
+        "shop": settings.shop_name,
+        "today": shop_now().date().isoformat(),
+        "timezone": settings.shop_timezone,
+    }
 
 
 @router.get("/health/ready")

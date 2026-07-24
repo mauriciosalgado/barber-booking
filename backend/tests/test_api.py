@@ -1,6 +1,6 @@
 """Integration tests for the booking API."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -68,7 +68,11 @@ def avail(client: TestClient, barber_id: int, day: object, service_id: int = HAI
 
 
 def test_health(client: TestClient):
-    assert client.get("/health").json()["status"] == "ok"
+    payload = client.get("/health").json()
+    assert payload["status"] == "ok"
+    assert payload["shop"] == "Test Shop"
+    assert payload["timezone"] == "UTC"
+    assert payload["today"] == datetime.now(timezone.utc).date().isoformat()
 
 
 def test_register_login_me(client: TestClient):
@@ -451,7 +455,7 @@ def test_staff_cancel_emails_the_customer(
 ):
     sent: list[tuple] = []
     monkeypatch.setattr(
-        "app.routers.appointments.send_email",
+        "app.notifications.send_email",
         lambda to, subject, body: sent.append((to, subject)),
     )
     joe = register(client, "joe@test.com")
@@ -465,7 +469,7 @@ def test_customer_self_cancel_sends_no_email(
 ):
     sent: list = []
     monkeypatch.setattr(
-        "app.routers.appointments.send_email", lambda *a, **k: sent.append(a)
+        "app.notifications.send_email", lambda *a, **k: sent.append(a)
     )
     joe = register(client, "joe@test.com")
     appt = first(book(client, joe, 1, slot(barber["open_day"])))
@@ -478,7 +482,7 @@ def test_cancel_walk_in_sends_no_email(
 ):
     sent: list = []
     monkeypatch.setattr(
-        "app.routers.appointments.send_email", lambda *a, **k: sent.append(a)
+        "app.notifications.send_email", lambda *a, **k: sent.append(a)
     )
     appt = first(
         book_manual(
@@ -869,6 +873,24 @@ def test_cancel_series_removes_all(
         == 204
     )
     assert client.get("/appointments", headers=headers).json() == []
+
+
+def test_staff_cancel_series_emails_the_customer_once(
+    client: TestClient, owner_headers: dict, barber: dict, monkeypatch
+):
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "app.notifications.send_email",
+        lambda to, subject, body: sent.append((to, subject)),
+    )
+    _allow_recurring(client, owner_headers)
+    headers = register(client, "joe@test.com")
+    booked = book(client, headers, 1, slot(barber["open_day"]), repeat_weeks=3).json()[
+        "booked"
+    ]
+    group = booked[0]["recurrence_group_id"]
+    assert client.delete(f"/appointments/series/{group}", headers=owner_headers).status_code == 204
+    assert sent == [("joe@test.com", "Horário fixo cancelado")]
 
 
 # --- perpetual recurrence -------------------------------------------------

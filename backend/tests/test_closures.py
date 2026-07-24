@@ -60,12 +60,31 @@ def test_closing_a_period_cancels_existing_appointments(
     inside = first(book(client, joe, 1, slot(day, "T10:00:00")))
     outside = first(book(client, joe, 1, slot(day, "T14:00:00")))
 
-    close(client, owner_headers, slot(day, "T09:00:00"), slot(day, "T12:00:00"))
+    resp = close(client, owner_headers, slot(day, "T09:00:00"), slot(day, "T12:00:00"))
+    assert resp.json()["cancelled_appointments"] == 1
 
     remaining = client.get("/appointments", headers=joe).json()
     ids = [a["id"] for a in remaining]
     assert inside["id"] not in ids  # cancelled by the closure
     assert outside["id"] in ids  # untouched
+
+
+def test_closure_cancellation_emails_registered_customers(
+    client: TestClient, owner_headers: dict, barber: dict, monkeypatch
+):
+    sent: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        "app.notifications.send_email",
+        lambda to, subject, body: sent.append((to, subject, body)),
+    )
+    day = barber["open_day"]
+    joe = register(client, "joe@test.com")
+    first(book(client, joe, 1, slot(day, "T10:00:00")))
+    close(client, owner_headers, slot(day, "T09:00:00"), slot(day, "T12:00:00"))
+    assert len(sent) == 1
+    assert sent[0][0] == "joe@test.com"
+    assert sent[0][1] == "Marcação cancelada"
+    assert "fecho da barbearia" in sent[0][2]
 
 
 def test_deleting_a_closure_reopens_the_slots(

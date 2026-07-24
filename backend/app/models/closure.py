@@ -33,3 +33,4 @@ class ClosureRead(SQLModel):
     start_at: datetime
     end_at: datetime
     reason: str | None
+    cancelled_appointments: int | None = None

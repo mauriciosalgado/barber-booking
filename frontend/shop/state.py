@@ -5,7 +5,7 @@ import base64
 import dataclasses
 import os
 from calendar import monthrange
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from itertools import groupby
 
 import httpx
@@ -92,6 +92,7 @@ FLASH_FIELDS = (
     "theme_msg",
     "profile_msg",
     "pw_msg",
+    "closure_msg",
 )
 
 
@@ -168,6 +169,7 @@ class ScheduledAppt:
 class ApptGroup:
     label: str  # "Hoje" / "Seg, 20 jul"
     appts: list[Appt]
+    year_label: str = ""  # "2027" when the list crosses into another year
 
 
 @dataclasses.dataclass
@@ -200,6 +202,8 @@ class DayTab:
     iso: str
     dow: str  # "Seg"
     dom: str  # "20"
+    month: str  # "jan"
+    year: str  # "2027" (empty for the current year)
     count: int
 
 
@@ -225,6 +229,16 @@ class CalCell:
     disabled: bool  # a pad, or a day in the past
 
 
+@dataclasses.dataclass
+class ClosureItem:
+    id: int
+    start_at: str  # API datetime string
+    end_at: str  # API datetime string
+    start_label: str  # "Seg, 02 jan 2027 09:00"
+    end_label: str  # "10:00" (or full label if another day)
+    reason: str = ""
+
+
 # Backend weekday value → Portuguese label, in Monday-first order.
 _WEEKDAYS = [
     ("Monday", "Segunda"),
@@ -246,24 +260,29 @@ _MON_FULL = [
 ]
 
 
-def _day_label(d: date) -> str:
+def _day_label(d: date, today: date) -> str:
     """A friendly heading for a day's group of appointments."""
-    today = date.today()
     if d == today:
         return "Hoje"
     if d == today + timedelta(days=1):
         return "Amanhã"
-    return f"{_DOW[d.weekday()]}, {d.day:02d} {_MON[d.month - 1]}"
+    label = f"{_DOW[d.weekday()]}, {d.day:02d} {_MON[d.month - 1]}"
+    return f"{label} {d.year}" if d.year != today.year else label
 
 
-def _by_day(rows: list[dict]):
+def _datetime_label(dt: datetime) -> str:
+    return f"{_DOW[dt.weekday()]}, {dt.day:02d} {_MON[dt.month - 1]} {dt.year} {dt:%H:%M}"
+
+
+def _by_day(rows: list[dict], today: date):
     """Group API rows (sorted by start_at) into (iso, label, rows) per day."""
     for iso_day, day_rows in groupby(rows, key=lambda r: r["start_at"][:10]):
-        yield iso_day, _day_label(date.fromisoformat(iso_day)), list(day_rows)
+        yield iso_day, _day_label(date.fromisoformat(iso_day), today), list(day_rows)
 
 
 class State(rx.State):
     shop_name: str = rx.field(default_factory=lambda: _cached("shop_name", "Barbearia"))
+    shop_today: str = rx.field(default_factory=lambda: _cached("shop_today", date.today().isoformat()))
     error: str = ""
     mail_inbox_url: str = MAIL_INBOX_URL  # dev only; empty in production
     admin_url: str = ADMIN_URL  # browser-facing link to the backend admin console
@@ -332,8 +351,13 @@ class State(rx.State):
     my_appointments: list[ApptGroup] = []
     schedule: list[ScheduleGroup] = []
     recurring_series: list[RecurringSeriesEntry] = []  # every "Horário Fixo", any role
+    closures: list[ClosureItem] = []
     admin_barber: int = 0
     selected_day: str = ""  # iso day chosen in the agenda's booked-day strip
+    closure_start: str = ""  # "YYYY-MM-DDTHH:MM" from datetime-local input
+    closure_end: str = ""  # "YYYY-MM-DDTHH:MM"
+    closure_reason: str = ""
+    closure_msg: str = ""
 
     # --- working hours (barber / admin edits a chair's weekly schedule) ---
     hours: list[HoursRow] = []
@@ -370,6 +394,13 @@ class State(rx.State):
     _pending_logo_type: str = ""
 
     # --- computed --------------------------------------------------------
+    def _today(self) -> date:
+        """Shop-local current date, from backend /health (fallback: local date)."""
+        try:
+            return date.fromisoformat(self.shop_today)
+        except ValueError:
+            return date.today()
+
     @rx.var
     def theme_css(self) -> str:
         """A CSS rule that publishes the derived palette as variables.
@@ -438,7 +469,7 @@ class State(rx.State):
 
     @rx.var
     def days(self) -> list[Day]:
-        today = date.today()
+        today = self._today()
         return [
             Day(
                 iso=(day := today + timedelta(days=i)).isoformat(),
@@ -452,7 +483,7 @@ class State(rx.State):
         """First of the month currently shown in the calendar (defaults to now)."""
         if self.cal_month:
             return date.fromisoformat(self.cal_month)
-        return date.today().replace(day=1)
+        return self._today().replace(day=1)
 
     @rx.var
     def cal_title(self) -> str:
@@ -467,7 +498,7 @@ class State(rx.State):
     def cal_cells(self) -> list[CalCell]:
         """The month laid out as whole weeks: blank pads, then each day."""
         first = self._cal_anchor()
-        today = date.today()
+        today = self._today()
         cells = [CalCell(iso="", dom="", disabled=True) for _ in range(first.weekday())]
         for dnum in range(1, monthrange(first.year, first.month)[1] + 1):
             d = first.replace(day=dnum)
@@ -479,18 +510,21 @@ class State(rx.State):
     @rx.var
     def can_cal_prev(self) -> bool:
         """Don't page back before this month — booking is only ever forward."""
-        return self._cal_anchor() > date.today().replace(day=1)
+        return self._cal_anchor() > self._today().replace(day=1)
 
     # The agenda strip shows only days that actually have bookings, however far
     # ahead they are — so a booking made months out is a chip, not hidden. The
     # agenda is read-only; new bookings are made in the scheduling card.
     @rx.var
     def schedule_tabs(self) -> list[DayTab]:
+        current_year = self._today().year
         return [
             DayTab(
                 iso=g.iso,
                 dow=_DOW[(d := date.fromisoformat(g.iso)).weekday()],
                 dom=f"{d.day:02d}",
+                month=_MON[d.month - 1],
+                year=str(d.year) if d.year != current_year else "",
                 count=len(g.appts),
             )
             for g in self.schedule
@@ -507,7 +541,14 @@ class State(rx.State):
     def selected_day_label(self) -> str:
         if not self.selected_day:
             return ""
-        return _day_label(date.fromisoformat(self.selected_day))
+        return _day_label(date.fromisoformat(self.selected_day), self._today())
+
+    @rx.var
+    def selected_day_year_label(self) -> str:
+        if not self.selected_day:
+            return ""
+        d = date.fromisoformat(self.selected_day)
+        return str(d.year) if d.year != self._today().year else ""
 
     @rx.event
     def select_schedule_day(self, iso: str):
@@ -522,8 +563,11 @@ class State(rx.State):
         """Public data everyone sees: the shop name and its barbers."""
         async with httpx.AsyncClient(base_url=API_URL, timeout=5) as client:
             try:
-                self.shop_name = (await client.get("/health")).json()["shop"]
+                health = (await client.get("/health")).json()
+                self.shop_name = health["shop"]
+                self.shop_today = health.get("today") or date.today().isoformat()
                 _public_cache["shop_name"] = self.shop_name
+                _public_cache["shop_today"] = self.shop_today
                 rows = (await client.get("/barbers")).json()
                 self.barbers = [
                     Barber(
@@ -589,6 +633,7 @@ class State(rx.State):
                 self.admin_barber = self.barbers[0].id if self.barbers else 0
                 self.selected_barber = self.admin_barber
                 await self._load_schedule(client, self.admin_barber)
+                await self._load_closures(client)
                 await self._load_hours(client, self.admin_barber)
                 await self._load_services(client, self.admin_barber)
                 await self._load_recurring_series(client)
@@ -620,21 +665,29 @@ class State(rx.State):
     async def _load_my_appointments(self, client: httpx.AsyncClient):
         rows = (await client.get("/appointments")).json()
         names = {b.id: b.name for b in self.barbers}
-        self.my_appointments = [
-            ApptGroup(
-                label=label,
-                appts=[
-                    Appt(
-                        id=r["id"],
-                        time=r["start_at"][11:16],
-                        barber_name=names.get(r["barber_id"], "Barbeiro"),
-                        group_id=r.get("recurrence_group_id") or "",
-                    )
-                    for r in day_rows
-                ],
+        today_year = self._today().year
+        previous_year: int | None = None
+        grouped: list[ApptGroup] = []
+        for _iso, label, day_rows in _by_day(rows, self._today()):
+            year = date.fromisoformat(_iso).year
+            year_label = str(year) if year != today_year and year != previous_year else ""
+            grouped.append(
+                ApptGroup(
+                    label=label,
+                    year_label=year_label,
+                    appts=[
+                        Appt(
+                            id=r["id"],
+                            time=r["start_at"][11:16],
+                            barber_name=names.get(r["barber_id"], "Barbeiro"),
+                            group_id=r.get("recurrence_group_id") or "",
+                        )
+                        for r in day_rows
+                    ],
+                )
             )
-            for _iso, label, day_rows in _by_day(rows)
-        ]
+            previous_year = year
+        self.my_appointments = grouped
 
     async def _load_recurring_series(self, client: httpx.AsyncClient):
         """Every "Horário Fixo" (standing weekly booking) visible to this user."""
@@ -719,15 +772,35 @@ class State(rx.State):
                     for r in day_rows
                 ],
             )
-            for iso, label, day_rows in _by_day(rows)
+            for iso, label, day_rows in _by_day(rows, self._today())
         ]
         # Keep the selected day valid: prefer today if it has bookings, else the
         # first booked day. This also re-anchors after a cancel empties a day.
         booked = {g.iso for g in self.schedule}
         if self.selected_day not in booked:
-            today = date.today().isoformat()
+            today = self._today().isoformat()
             self.selected_day = (
                 today if today in booked else (self.schedule[0].iso if self.schedule else today)
+            )
+
+    async def _load_closures(self, client: httpx.AsyncClient):
+        rows = (await client.get("/closures")).json()
+        self.closures = []
+        for r in rows:
+            start_dt = datetime.fromisoformat(r["start_at"])
+            end_dt = datetime.fromisoformat(r["end_at"])
+            same_day = start_dt.date() == end_dt.date()
+            self.closures.append(
+                ClosureItem(
+                    id=r["id"],
+                    start_at=r["start_at"],
+                    end_at=r["end_at"],
+                    start_label=_datetime_label(start_dt),
+                    end_label=end_dt.strftime("%H:%M")
+                    if same_day
+                    else _datetime_label(end_dt),
+                    reason=r.get("reason") or "",
+                )
             )
 
     async def _load_theme(self, client: httpx.AsyncClient):
@@ -934,6 +1007,11 @@ class State(rx.State):
         self.pw_new = ""
         self.pw_msg = ""
         self.auth_mode = "login"
+        self.closures = []
+        self.closure_start = ""
+        self.closure_end = ""
+        self.closure_reason = ""
+        self.closure_msg = ""
 
     @rx.event
     def set_auth_mode(self, mode: str):
@@ -1053,6 +1131,18 @@ class State(rx.State):
     @rx.event
     def set_manual_email(self, value: str):
         self.manual_email = value
+
+    @rx.event
+    def set_closure_start(self, value: str):
+        self.closure_start = value
+
+    @rx.event
+    def set_closure_end(self, value: str):
+        self.closure_end = value
+
+    @rx.event
+    def set_closure_reason(self, value: str):
+        self.closure_reason = value
 
     # --- profile events --------------------------------------------------
     @rx.event
@@ -1180,6 +1270,71 @@ class State(rx.State):
             else:
                 self.booking_msg = "Não foi possível marcar. Tente novamente."
         yield State.clear_message_after("booking_msg", self.booking_msg)
+
+    @rx.event
+    async def create_closure(self):
+        self.closure_msg = ""
+        if not self.closure_start or not self.closure_end:
+            self.closure_msg = "Indique o início e o fim do fecho."
+            yield State.clear_message_after("closure_msg", self.closure_msg)
+            return
+        try:
+            start_dt = datetime.fromisoformat(self.closure_start)
+            end_dt = datetime.fromisoformat(self.closure_end)
+        except ValueError:
+            self.closure_msg = "Datas inválidas."
+            yield State.clear_message_after("closure_msg", self.closure_msg)
+            return
+        if start_dt >= end_dt:
+            self.closure_msg = "O fim tem de ser depois do início."
+            yield State.clear_message_after("closure_msg", self.closure_msg)
+            return
+        payload = {
+            "start_at": self.closure_start,
+            "end_at": self.closure_end,
+            "reason": self.closure_reason.strip() or None,
+        }
+        async with httpx.AsyncClient(base_url=API_URL, timeout=5, headers=self._auth()) as client:
+            resp = await client.post("/closures", json=payload)
+            if resp.status_code == 201:
+                cancelled = int(resp.json().get("cancelled_appointments") or 0)
+                if cancelled == 0:
+                    self.closure_msg = "Fecho criado."
+                elif cancelled == 1:
+                    self.closure_msg = "Fecho criado e 1 marcação cancelada."
+                else:
+                    self.closure_msg = (
+                        f"Fecho criado e {cancelled} marcações canceladas."
+                    )
+                self.closure_start = ""
+                self.closure_end = ""
+                self.closure_reason = ""
+                await self._load_closures(client)
+                await self._load_schedule(client, self.selected_barber)
+                await self._fetch_slots(client)
+            elif resp.status_code == 422:
+                self.closure_msg = "Verifique o período do fecho."
+            elif resp.status_code == 403:
+                self.closure_msg = "Apenas o admin pode gerir fechos."
+            else:
+                self.closure_msg = "Não foi possível criar o fecho."
+        yield State.clear_message_after("closure_msg", self.closure_msg)
+
+    @rx.event
+    async def delete_closure(self, closure_id: int):
+        self.closure_msg = ""
+        async with httpx.AsyncClient(base_url=API_URL, timeout=5, headers=self._auth()) as client:
+            resp = await client.delete(f"/closures/{closure_id}")
+            if resp.status_code == 204:
+                self.closure_msg = "Fecho removido."
+                await self._load_closures(client)
+                await self._load_schedule(client, self.selected_barber)
+                await self._fetch_slots(client)
+            elif resp.status_code == 403:
+                self.closure_msg = "Apenas o admin pode gerir fechos."
+            else:
+                self.closure_msg = "Não foi possível remover o fecho."
+        yield State.clear_message_after("closure_msg", self.closure_msg)
 
     @rx.event
     async def cancel_appointment(self, appt_id: int):
@@ -1478,4 +1633,3 @@ class State(rx.State):
             else:
                 self.manual_msg = "Não foi possível marcar. Verifique os dados."
         yield State.clear_message_after("manual_msg", self.manual_msg)
-
