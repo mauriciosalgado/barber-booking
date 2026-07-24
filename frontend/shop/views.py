@@ -166,6 +166,40 @@ def row_detail(icon: str, text: str | rx.Var) -> rx.Component:
     )
 
 
+def clamped_text(
+    text: str | rx.Var,
+    *,
+    lines: int = 1,
+    size: str = "1",
+    color: str = MUTED,
+    weight: str | None = None,
+) -> rx.Component:
+    """Readable truncation: keep rows compact without exploding layout width/height."""
+    common = {"size": size, "color": color, "width": "100%"}
+    if weight is not None:
+        common["weight"] = weight
+    if lines <= 1:
+        return rx.text(
+            text,
+            white_space="nowrap",
+            overflow="hidden",
+            text_overflow="ellipsis",
+            **common,
+        )
+    return rx.text(
+        text,
+        style={
+            "display": "-webkit-box",
+            "-webkit-line-clamp": str(lines),
+            "-webkit-box-orient": "vertical",
+            "overflow": "hidden",
+            "word-break": "break-word",
+            "overflow-wrap": "anywhere",
+        },
+        **common,
+    )
+
+
 # --- booking pieces (shared by the customer view) ------------------------
 
 
@@ -486,7 +520,14 @@ def my_appointment_row(appt: Appt) -> rx.Component:
 def service_switcher(appt: ScheduledAppt) -> rx.Component:
     """A dropdown to change this booking's service, freeing or using agenda time."""
     return rx.select.root(
-        rx.select.trigger(variant="soft", radius="large"),
+        rx.select.trigger(
+            variant="soft",
+            radius="large",
+            width="clamp(6.5rem, 34vw, 8.5rem)",
+            white_space="nowrap",
+            overflow="hidden",
+            text_overflow="ellipsis",
+        ),
         rx.select.content(
             rx.foreach(
                 State.services,
@@ -502,72 +543,81 @@ def service_switcher(appt: ScheduledAppt) -> rx.Component:
 
 
 def schedule_row(appt: ScheduledAppt) -> rx.Component:
-    return row(
+    return rx.box(
         rx.hstack(
-            rx.icon("clock", size=18, color=BRAND),
-            rx.vstack(
-                rx.hstack(
-                    rx.text(appt.time, weight="bold", color=INK, size="2"),
-                    rx.cond(
-                        appt.group_id != "",
-                        rx.badge(
-                            rx.icon("repeat", size=12),
-                            color_scheme="grass",
-                            variant="soft",
-                            radius="full",
+            rx.hstack(
+                rx.icon("clock", size=18, color=BRAND, flex_shrink="0"),
+                rx.vstack(
+                    rx.hstack(
+                        rx.text(appt.time, weight="bold", color=INK, size="2"),
+                        rx.cond(
+                            appt.group_id != "",
+                            rx.badge(
+                                rx.icon("repeat", size=12),
+                                color_scheme="grass",
+                                variant="soft",
+                                radius="full",
+                            ),
                         ),
+                        service_switcher(appt),
+                        align="center",
+                        spacing="2",
+                        wrap="wrap",
                     ),
-                    align="center",
-                    spacing="2",
-                ),
-                rx.text(
-                    appt.customer_name,
-                    size="1",
-                    color=MUTED,
+                    clamped_text(
+                        appt.customer_name,
+                        lines=2,
+                        size="2",
+                        color=INK,
+                    ),
+                    rx.cond(
+                        appt.service_name != "",
+                        clamped_text(appt.service_name, lines=1, size="1", color=MUTED),
+                    ),
+                    spacing="0",
+                    align="start",
                     width="100%",
-                    white_space="nowrap",
-                    overflow="hidden",
-                    text_overflow="ellipsis",
                 ),
-                rx.cond(
-                    appt.service_name != "",
-                    rx.text(
-                        appt.service_name,
-                        size="1",
-                        color=MUTED,
-                        width="100%",
-                        white_space="nowrap",
-                        overflow="hidden",
-                        text_overflow="ellipsis",
-                    ),
-                ),
-                spacing="0",
-                align="start",
+                spacing="3",
+                width="100%",
                 min_width="0",
+                align="start",
                 flex="1",
             ),
-            align="center",
-            spacing="3",
-            min_width="0",
-            flex="1",
-        ),
-        rx.hstack(
-            service_switcher(appt),
-            rx.cond(
-                appt.customer_email != "",
-                appointment_info_button(appt),
-                rx.badge("Sem conta", color_scheme="gray", variant="soft", radius="full"),
+            rx.box(
+                rx.box(
+                    rx.cond(
+                        appt.customer_email != "",
+                        appointment_info_button(appt),
+                        rx.badge("Sem conta", color_scheme="gray", variant="soft", radius="full"),
+                    ),
+                    position="absolute",
+                    top="0",
+                    right="0",
+                ),
+                rx.box(
+                    confirm_button(
+                        "Cancelar",
+                        f"Isto cancela a marcação de {appt.customer_name} às {appt.time}.",
+                        State.cancel_schedule_appointment(appt.id),
+                    ),
+                    position="absolute",
+                    top="50%",
+                    right="0",
+                    transform="translateY(-50%)",
+                ),
+                position="relative",
+                min_height="5rem",
+                width="clamp(5rem, 24vw, 5.8rem)",
+                flex_shrink="0",
             ),
-            confirm_button(
-                "Cancelar",
-                f"Isto cancela a marcação de {appt.customer_name} às {appt.time}.",
-                State.cancel_schedule_appointment(appt.id),
-            ),
-            align="center",
+            width="100%",
+            align="start",
             spacing="2",
-            wrap="wrap",
-            flex_shrink="0",
         ),
+        width="100%",
+        padding_y="0.85rem",
+        border_top=f"1px solid {BORDER}",
     )
 
 
@@ -595,90 +645,82 @@ def recurring_series_row(entry: RecurringSeriesEntry, for_staff: bool) -> rx.Com
     """
     headline = rx.cond(
         for_staff,
-        rx.text(
-            entry.customer_name,
-            weight="bold",
-            color=INK,
-            size="2",
-            width="100%",
-            white_space="nowrap",
-            overflow="hidden",
-            text_overflow="ellipsis",
-        ),
-        rx.text(
-            entry.service_name,
-            weight="bold",
-            color=INK,
-            size="2",
-            width="100%",
-            white_space="nowrap",
-            overflow="hidden",
-            text_overflow="ellipsis",
-        ),
+        clamped_text(entry.customer_name, lines=2, size="2", color=INK, weight="bold"),
+        clamped_text(entry.service_name, lines=2, size="2", color=INK, weight="bold"),
     )
-    detail_line = rx.cond(
+    service_line = rx.cond(
         for_staff,
-        rx.text(
-            f"{entry.service_name} · Toda {entry.weekday_label} às {entry.time_label} · "
-            f"com {entry.barber_name}",
-            size="1",
-            color=MUTED,
-            width="100%",
-            white_space="nowrap",
-            overflow="hidden",
-            text_overflow="ellipsis",
-        ),
-        rx.text(
-            f"Toda {entry.weekday_label} às {entry.time_label} · "
-            f"{entry.customer_name} · com {entry.barber_name}",
-            size="1",
-            color=MUTED,
-            width="100%",
-            white_space="nowrap",
-            overflow="hidden",
-            text_overflow="ellipsis",
-        ),
+        clamped_text(entry.service_name, lines=1, size="1", color=MUTED),
+        clamped_text(f"com {entry.barber_name}", lines=1, size="1", color=MUTED),
     )
-    return row(
+    schedule_line = clamped_text(
+        f"Toda {entry.weekday_label} às {entry.time_label}",
+        lines=1,
+        size="1",
+        color=MUTED,
+    )
+    barber_line = rx.cond(
+        for_staff,
+        clamped_text(entry.barber_name, lines=1, size="1", color=MUTED),
+    )
+    return rx.box(
         rx.hstack(
-            rx.icon("repeat", size=18, color=BRAND),
-            rx.vstack(
-                rx.hstack(
+            rx.hstack(
+                rx.icon("repeat", size=18, color=BRAND, flex_shrink="0"),
+                rx.vstack(
                     headline,
                     rx.badge(
                         entry.limit_label,
                         color_scheme=rx.cond(entry.kind == "perpetual", "grass", "gray"),
                         variant="soft",
                         radius="full",
+                        size="1",
+                        max_width="100%",
                     ),
-                    align="center",
-                    spacing="2",
+                    service_line,
+                    schedule_line,
+                    barber_line,
+                    spacing="1",
+                    align="start",
                     width="100%",
-                    min_width="0",
                 ),
-                detail_line,
-                spacing="0",
                 align="start",
+                spacing="3",
+                width="100%",
                 min_width="0",
                 flex="1",
             ),
-            align="center",
-            spacing="3",
-            min_width="0",
-            flex="1",
-        ),
-        rx.hstack(
-            rx.cond(for_staff, customer_info_button(entry)),
-            confirm_button(
-                "Cancelar",
-                f"Isto termina definitivamente este horário fixo: {entry.service_name}, "
-                f"toda {entry.weekday_label} às {entry.time_label}.",
-                State.cancel_recurring_series(entry.id),
+            rx.box(
+                rx.box(
+                    rx.cond(for_staff, customer_info_button(entry)),
+                    position="absolute",
+                    top="0",
+                    right="0",
+                ),
+                rx.box(
+                    confirm_button(
+                        "Cancelar",
+                        f"Isto termina definitivamente este horário fixo: {entry.service_name}, "
+                        f"toda {entry.weekday_label} às {entry.time_label}.",
+                        State.cancel_recurring_series(entry.id),
+                    ),
+                    position="absolute",
+                    top="50%",
+                    right="0",
+                    transform="translateY(-50%)",
+                ),
+                position="relative",
+                min_height="5rem",
+                width="clamp(5rem, 24vw, 5.8rem)",
+                flex_shrink="0",
             ),
-            align="center",
+            width="100%",
+            align="start",
             spacing="2",
-            flex_shrink="0",
         ),
+        width="100%",
+        padding_y="0.85rem",
+        border_top=f"1px solid {BORDER}",
     )
 
 
