@@ -165,7 +165,7 @@ def switch_fits(
 
 def cancel_appointments_between(
     session: Session, start_at: datetime, end_at: datetime
-) -> int:
+) -> tuple[int, list[tuple[str, str, datetime]]]:
     """Cancel appointments overlapping [start_at, end_at); returns how many.
 
     An appointment runs for its own stored length, so it overlaps the closure
@@ -178,6 +178,15 @@ def cancel_appointments_between(
         if appointment.start_at + timedelta(minutes=appointment.duration_minutes)
         > start_at
     ]
+    notifications: list[tuple[str, str, datetime]] = []
     for appointment in overlapping:
+        if appointment.customer is not None:
+            notifications.append(
+                (
+                    appointment.customer.email,
+                    appointment.customer.full_name,
+                    appointment.start_at,
+                )
+            )
         session.delete(appointment)
-    return len(overlapping)
+    return len(overlapping), notifications

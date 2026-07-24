@@ -21,6 +21,7 @@ from wtforms import Form, PasswordField
 from app.availability import available_slots, cancel_appointments_between
 from app.config import get_settings
 from app.database import engine
+from app.notifications import notify_cancellation
 from app.models import (
     Appointment,
     Barber,
@@ -264,8 +265,18 @@ class ClosureAdmin(ModelView, model=Closure):
         # Closing a period cancels any appointments already booked inside it.
         if is_created:
             with Session(engine) as session:
-                cancel_appointments_between(session, model.start_at, model.end_at)
+                _count, notifications = cancel_appointments_between(
+                    session, model.start_at, model.end_at
+                )
                 session.commit()
+                for email, name, start_at in notifications:
+                    notify_cancellation(
+                        email,
+                        name,
+                        start_at,
+                        reason=model.reason,
+                        caused_by_closure=True,
+                    )
 
 
 class SettingAdmin(ModelView, model=Setting):

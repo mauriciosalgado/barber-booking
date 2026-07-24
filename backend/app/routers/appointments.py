@@ -1,6 +1,5 @@
 """Appointments — customers reserve and cancel slots."""
 
-import logging
 from collections.abc import Sequence
 from datetime import datetime, time, timedelta
 from uuid import uuid4
@@ -17,9 +16,7 @@ from app.availability import (
     slot_is_free,
     switch_fits,
 )
-from app.config import get_settings
 from app.database import SessionDep
-from app.email import send_email
 from app.models import (
     Appointment,
     AppointmentCreate,
@@ -33,10 +30,9 @@ from app.models import (
     ServiceSwitch,
     User,
 )
+from app.notifications import notify_cancellation, notify_series_cancellation
 from app.recurrence import ensure_materialized, ensure_materialized_for_customer
 from app.security import CurrentUser
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -56,25 +52,6 @@ def _standing_slot_conflict_error() -> HTTPException:
             "message": "You already have a standing appointment at this weekday and time",
         },
     )
-
-
-def _notify_cancellation(email: str, name: str, start_at: datetime) -> None:
-    """Let a registered customer know a barber or admin cancelled their slot.
-
-    Best-effort: a mail outage must never fail the cancellation itself.
-    """
-    when = start_at.strftime("%d/%m/%Y às %H:%M")
-    shop = get_settings().shop_name
-    try:
-        send_email(
-            email,
-            "Marcação cancelada",
-            f"Olá {name},\n\n"
-            f"A sua marcação em {shop} no dia {when} foi cancelada.\n\n"
-            "Pode voltar a marcar quando quiser.",
-        )
-    except OSError as error:
-        logger.warning("Could not send cancellation email to %s: %s", email, error)
 
 
 def _has_standing_slot_conflict(
@@ -487,11 +464,32 @@ def cancel_series(group_id: str, session: SessionDep, user: CurrentUser) -> None
     if not is_staff and customer_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your series")
 
+    notify_series: tuple[str, str, datetime, int] | None = None
+    if is_staff and customer_id is not None:
+        customer = session.get(User, customer_id)
+        if customer is not None:
+            anchor = (
+                appointments[0].start_at
+                if appointments
+                else (series.anchor_start_at if series is not None else shop_now())
+            )
+            notify_series = (
+                customer.email,
+                customer.full_name,
+                anchor,
+                len(appointments),
+            )
+
     if series is not None:
         session.delete(series)
     for appointment in appointments:
         session.delete(appointment)
     session.commit()
+    if notify_series is not None:
+        email, name, anchor, count = notify_series
+        notify_series_cancellation(
+            email, name, anchor_at=anchor, canceled_count=count
+        )
 
 
 @router.delete("/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -526,4 +524,4 @@ def cancel(appointment_id: int, session: SessionDep, user: CurrentUser) -> None:
     session.commit()
 
     if notify is not None:
-        _notify_cancellation(*notify)
+        notify_cancellation(*notify)

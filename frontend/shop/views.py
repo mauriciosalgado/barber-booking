@@ -15,8 +15,8 @@ from shop.state import (
     ApptGroup,
     Barber,
     CalCell,
-    Day,
     DayTab,
+    ClosureItem,
     HoursRow,
     RecurringSeriesEntry,
     ScheduledAppt,
@@ -173,7 +173,15 @@ def barber_card(barber: Barber) -> rx.Component:
     active = State.selected_barber == barber.id
     return rx.hstack(
         rx.icon("scissors", size=18, color=BRAND_TEXT),
-        rx.text(barber.name, weight="bold", color=INK),
+        rx.text(
+            barber.name,
+            weight="bold",
+            color=INK,
+            white_space="nowrap",
+            overflow="hidden",
+            text_overflow="ellipsis",
+            max_width="15rem",
+        ),
         on_click=State.select_barber(barber.id),
         cursor="pointer",
         padding="0.7rem 1rem",
@@ -183,25 +191,6 @@ def barber_card(barber: Barber) -> rx.Component:
         align="center",
         spacing="2",
         transition="border-color 0.15s ease",
-    )
-
-
-def day_chip(day: Day) -> rx.Component:
-    active = State.selected_date == day.iso
-    return rx.vstack(
-        rx.text(day.dow, size="1", weight="medium"),
-        rx.text(day.dom, size="4", weight="bold"),
-        on_click=State.select_date(day.iso),
-        cursor="pointer",
-        padding="0.55rem 0.8rem",
-        border_radius="14px",
-        min_width="3.2rem",
-        flex_shrink="0",
-        align="center",
-        spacing="0",
-        background=rx.cond(active, BRAND, SUBTLE),
-        color=rx.cond(active, BRAND_CONTRAST, INK),
-        transition="background 0.15s ease",
     )
 
 
@@ -319,13 +308,7 @@ def booking_card() -> rx.Component:
             step(
                 "3",
                 "Escolha um dia",
-                rx.hstack(
-                    rx.foreach(State.days, day_chip),
-                    overflow_x="auto",
-                    width="100%",
-                    padding_bottom="0.4rem",
-                    spacing="2",
-                ),
+                calendar_picker(),
             ),
             step("4", "Escolha uma hora", slots_area()),
             recurrence_selector(),
@@ -434,6 +417,26 @@ def day_header(label: str | rx.Var[str]) -> rx.Component:
     )
 
 
+def year_separator(year: str | rx.Var[str]) -> rx.Component:
+    """A clear but lightweight divider when the agenda crosses into another year."""
+    return rx.hstack(
+        rx.box(flex="1", height="1px", background=BORDER),
+        rx.badge(
+            year,
+            variant="soft",
+            color_scheme="gray",
+            radius="full",
+            size="1",
+            padding_x="0.55rem",
+        ),
+        rx.box(flex="1", height="1px", background=BORDER),
+        align="center",
+        spacing="2",
+        width="100%",
+        padding_top="1rem",
+    )
+
+
 def my_appointment_row(appt: Appt) -> rx.Component:
     return row(
         rx.hstack(
@@ -517,13 +520,36 @@ def schedule_row(appt: ScheduledAppt) -> rx.Component:
                     align="center",
                     spacing="2",
                 ),
-                muted(appt.customer_name, size="1"),
-                rx.cond(appt.service_name != "", muted(appt.service_name, size="1")),
+                rx.text(
+                    appt.customer_name,
+                    size="1",
+                    color=MUTED,
+                    width="100%",
+                    white_space="nowrap",
+                    overflow="hidden",
+                    text_overflow="ellipsis",
+                ),
+                rx.cond(
+                    appt.service_name != "",
+                    rx.text(
+                        appt.service_name,
+                        size="1",
+                        color=MUTED,
+                        width="100%",
+                        white_space="nowrap",
+                        overflow="hidden",
+                        text_overflow="ellipsis",
+                    ),
+                ),
                 spacing="0",
                 align="start",
+                min_width="0",
+                flex="1",
             ),
             align="center",
             spacing="3",
+            min_width="0",
+            flex="1",
         ),
         rx.hstack(
             service_switcher(appt),
@@ -540,12 +566,17 @@ def schedule_row(appt: ScheduledAppt) -> rx.Component:
             align="center",
             spacing="2",
             wrap="wrap",
+            flex_shrink="0",
         ),
     )
 
 
 def my_appointment_group(group: ApptGroup) -> rx.Component:
     return rx.vstack(
+        rx.cond(
+            group.year_label != "",
+            year_separator(group.year_label),
+        ),
         day_header(group.label),
         rx.foreach(group.appts, my_appointment_row),
         spacing="0",
@@ -564,20 +595,48 @@ def recurring_series_row(entry: RecurringSeriesEntry, for_staff: bool) -> rx.Com
     """
     headline = rx.cond(
         for_staff,
-        rx.text(entry.customer_name, weight="bold", color=INK, size="2"),
-        rx.text(entry.service_name, weight="bold", color=INK, size="2"),
+        rx.text(
+            entry.customer_name,
+            weight="bold",
+            color=INK,
+            size="2",
+            width="100%",
+            white_space="nowrap",
+            overflow="hidden",
+            text_overflow="ellipsis",
+        ),
+        rx.text(
+            entry.service_name,
+            weight="bold",
+            color=INK,
+            size="2",
+            width="100%",
+            white_space="nowrap",
+            overflow="hidden",
+            text_overflow="ellipsis",
+        ),
     )
     detail_line = rx.cond(
         for_staff,
-        muted(
+        rx.text(
             f"{entry.service_name} · Toda {entry.weekday_label} às {entry.time_label} · "
             f"com {entry.barber_name}",
             size="1",
+            color=MUTED,
+            width="100%",
+            white_space="nowrap",
+            overflow="hidden",
+            text_overflow="ellipsis",
         ),
-        muted(
+        rx.text(
             f"Toda {entry.weekday_label} às {entry.time_label} · "
             f"{entry.customer_name} · com {entry.barber_name}",
             size="1",
+            color=MUTED,
+            width="100%",
+            white_space="nowrap",
+            overflow="hidden",
+            text_overflow="ellipsis",
         ),
     )
     return row(
@@ -594,13 +653,19 @@ def recurring_series_row(entry: RecurringSeriesEntry, for_staff: bool) -> rx.Com
                     ),
                     align="center",
                     spacing="2",
+                    width="100%",
+                    min_width="0",
                 ),
                 detail_line,
                 spacing="0",
                 align="start",
+                min_width="0",
+                flex="1",
             ),
             align="center",
             spacing="3",
+            min_width="0",
+            flex="1",
         ),
         rx.hstack(
             rx.cond(for_staff, customer_info_button(entry)),
@@ -612,6 +677,7 @@ def recurring_series_row(entry: RecurringSeriesEntry, for_staff: bool) -> rx.Com
             ),
             align="center",
             spacing="2",
+            flex_shrink="0",
         ),
     )
 
@@ -645,6 +711,12 @@ def schedule_day_chip(tab: DayTab) -> rx.Component:
     return rx.vstack(
         rx.text(tab.dow, size="1", weight="medium"),
         rx.text(tab.dom, size="4", weight="bold"),
+        rx.text(tab.month, size="1", weight="medium"),
+        rx.cond(
+            tab.year != "",
+            rx.badge(tab.year, color_scheme="gray", variant="soft", radius="full", size="1"),
+            rx.box(height="1.2rem"),
+        ),
         rx.cond(
             tab.count > 0,
             rx.center(
@@ -672,9 +744,80 @@ def schedule_day_chip(tab: DayTab) -> rx.Component:
     )
 
 
+def closure_row(item: ClosureItem) -> rx.Component:
+    return row(
+        rx.vstack(
+            rx.text(f"{item.start_label} → {item.end_label}", weight="bold", color=INK, size="2"),
+            rx.cond(item.reason != "", muted(item.reason, size="1")),
+            spacing="0",
+            align="start",
+            min_width="0",
+            flex="1",
+        ),
+        confirm_button(
+            "Remover",
+            f"Isto remove o fecho de {item.start_label}.",
+            State.delete_closure(item.id),
+            color_scheme="tomato",
+        ),
+    )
+
+
+def closures_card() -> rx.Component:
+    return card(
+        rx.vstack(
+            panel_title("Fechos", "Bloqueie períodos em que a barbearia está fechada"),
+            rx.hstack(
+                rx.input(
+                    type="datetime-local",
+                    value=State.closure_start,
+                    on_change=State.set_closure_start,
+                    size="2",
+                    width="100%",
+                ),
+                rx.input(
+                    type="datetime-local",
+                    value=State.closure_end,
+                    on_change=State.set_closure_end,
+                    size="2",
+                    width="100%",
+                ),
+                spacing="2",
+                width="100%",
+            ),
+            rx.input(
+                placeholder="Motivo (opcional)",
+                value=State.closure_reason,
+                on_change=State.set_closure_reason,
+                size="2",
+                width="100%",
+            ),
+            rx.button(
+                "Criar fecho",
+                on_click=State.create_closure,
+                size="2",
+                width="100%",
+                border_radius="12px",
+            ),
+            rx.cond(State.closure_msg != "", rx.callout(State.closure_msg, icon="info", width="100%")),
+            rx.cond(
+                State.closures,
+                rx.vstack(rx.foreach(State.closures, closure_row), spacing="0", width="100%"),
+                muted("Sem fechos definidos.", size="1"),
+            ),
+            spacing="3",
+            width="100%",
+        )
+    )
+
+
 def selected_day_agenda() -> rx.Component:
     """The appointments for the day chosen in the week strip — one day at a time."""
     return rx.vstack(
+        rx.cond(
+            State.selected_day_year_label != "",
+            year_separator(State.selected_day_year_label),
+        ),
         day_header(State.selected_day_label),
         rx.cond(
             State.selected_day_appts,
@@ -1432,7 +1575,13 @@ def admin_view() -> rx.Component:
     def picker(barber: Barber) -> rx.Component:
         active = State.admin_barber == barber.id
         return rx.button(
-            barber.name,
+            rx.text(
+                barber.name,
+                white_space="nowrap",
+                overflow="hidden",
+                text_overflow="ellipsis",
+                max_width="14rem",
+            ),
             on_click=State.view_barber_schedule(barber.id),
             variant=rx.cond(active, "solid", "soft"),
             size="2",
@@ -1455,6 +1604,7 @@ def admin_view() -> rx.Component:
         manual_booking_card(),
         working_hours_card(),
         services_card(),
+        closures_card(),
         appearance_card(),
         rx.cond(
             State.admin_url != "",
